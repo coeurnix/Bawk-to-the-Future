@@ -1,0 +1,24 @@
+{
+	"name": "test-sequence-2",
+	"points": {
+		"player-start": [-2, -8],
+		"player-face-target": [-2, -11, 1.45],
+		"coworker-spawn": [-1.25, -10.75]
+	},
+	"npcs": {
+		"female-coworker": {
+			"model": "npc-female-coworker",
+			"point": "coworker-spawn",
+			"hidden": true
+		}
+	},
+	"events": [
+		{ "at": 0, "type": "player-teleport", "point": "player-start" },
+		{ "at": 0.1, "type": "player-face-towards", "point": "player-face-target" },
+		{ "at": 0.2, "type": "show-hint", "hint": "Female coworker should track your camera with head and eyes." },
+		{ "at": 0.4, "type": "npc-show", "npc": "female-coworker" },
+		{ "at": 0.5, "type": "npc-face-towards", "npc": "female-coworker", "point": "player-start" },
+		{ "at": 0.6, "type": "npc-look-at-player", "npc": "female-coworker" },
+		{ "at": 6.2, "type": "hide-hint" }
+	]
+}

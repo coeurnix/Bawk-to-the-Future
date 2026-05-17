@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Bawk to the Future</title>
+		<link rel="icon" href="data:," />
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family:
+					Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+					sans-serif;
+				background: #111417;
+				color: #f3f5f7;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			html,
+			body {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				overflow: hidden;
+			}
+
+			#game {
+				position: fixed;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+				display: block;
+				background: #111417;
+			}
+
+			#hud {
+				position: fixed;
+				inset: 0;
+				pointer-events: none;
+			}
+
+			#crosshair {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				width: 14px;
+				height: 14px;
+				border: 2px solid rgba(255, 255, 255, 0.78);
+				border-radius: 50%;
+				transform: translate(-50%, -50%);
+				box-shadow: 0 0 14px rgba(0, 0, 0, 0.45);
+			}
+
+			#status-line {
+				position: absolute;
+				left: 18px;
+				bottom: 16px;
+				max-width: min(560px, calc(100vw - 36px));
+				padding: 8px 10px;
+				border-radius: 6px;
+				background: rgba(8, 10, 12, 0.62);
+				color: rgba(243, 245, 247, 0.84);
+				font-size: 13px;
+				line-height: 1.35;
+			}
+
+			#position-line {
+				position: absolute;
+				left: 18px;
+				bottom: 54px;
+				padding: 8px 10px;
+				border-radius: 6px;
+				background: rgba(8, 10, 12, 0.62);
+				color: rgba(243, 245, 247, 0.84);
+				font-size: 13px;
+				line-height: 1.35;
+				font-variant-numeric: tabular-nums;
+			}
+
+			#loading,
+			#prompt,
+			#console-panel {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				width: min(420px, calc(100vw - 32px));
+				padding: 18px 20px;
+				border: 1px solid rgba(255, 255, 255, 0.18);
+				border-radius: 8px;
+				background: rgba(9, 12, 15, 0.78);
+				box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+				text-align: center;
+				font-size: 15px;
+				line-height: 1.45;
+				backdrop-filter: blur(10px);
+			}
+
+			#console-panel {
+				top: auto;
+				bottom: 72px;
+				width: min(720px, calc(100vw - 32px));
+				padding: 10px;
+				text-align: left;
+				pointer-events: auto;
+			}
+
+			#console-log {
+				min-height: 20px;
+				margin-bottom: 8px;
+				color: rgba(243, 245, 247, 0.74);
+				font: 13px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			}
+
+			#console-input {
+				width: 100%;
+				height: 34px;
+				border: 1px solid rgba(255, 255, 255, 0.22);
+				border-radius: 4px;
+				padding: 0 9px;
+				background: rgba(4, 6, 8, 0.86);
+				color: #f3f5f7;
+				font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+				outline: none;
+			}
+
+			#console-input:focus {
+				border-color: rgba(106, 186, 255, 0.88);
+				box-shadow: 0 0 0 2px rgba(106, 186, 255, 0.18);
+			}
+
+			#animation-browser {
+				position: absolute;
+				right: 16px;
+				top: 16px;
+				bottom: 16px;
+				width: min(520px, calc(100vw - 32px));
+				display: grid;
+				grid-template-rows: auto 1fr;
+				gap: 10px;
+				padding: 12px;
+				border: 1px solid rgba(255, 255, 255, 0.18);
+				border-radius: 8px;
+				background: rgba(9, 12, 15, 0.82);
+				box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+				backdrop-filter: blur(10px);
+				pointer-events: auto;
+			}
+
+			#animation-browser[hidden] {
+				display: none;
+			}
+
+			.animation-browser-header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 12px;
+				font-size: 13px;
+				color: rgba(243, 245, 247, 0.82);
+			}
+
+			#animation-browser-close {
+				width: 28px;
+				height: 28px;
+				border: 1px solid rgba(255, 255, 255, 0.2);
+				border-radius: 4px;
+				background: rgba(255, 255, 255, 0.08);
+				color: #f3f5f7;
+				cursor: pointer;
+			}
+
+			.animation-browser-columns {
+				min-height: 0;
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 10px;
+			}
+
+			.animation-browser-column {
+				min-height: 0;
+				display: grid;
+				grid-template-rows: auto auto 1fr;
+				gap: 8px;
+			}
+
+			.animation-browser-column h2 {
+				margin: 0;
+				font-size: 13px;
+				font-weight: 650;
+			}
+
+			.animation-browser-search {
+				width: 100%;
+				height: 30px;
+				border: 1px solid rgba(255, 255, 255, 0.18);
+				border-radius: 4px;
+				padding: 0 8px;
+				background: rgba(4, 6, 8, 0.78);
+				color: #f3f5f7;
+				font-size: 12px;
+				outline: none;
+			}
+
+			.animation-browser-list {
+				min-height: 0;
+				overflow: auto;
+				display: flex;
+				flex-direction: column;
+				gap: 5px;
+			}
+
+			.animation-browser-item {
+				min-height: 30px;
+				border: 1px solid rgba(255, 255, 255, 0.14);
+				border-radius: 4px;
+				padding: 5px 7px;
+				background: rgba(255, 255, 255, 0.07);
+				color: #f3f5f7;
+				font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+				text-align: left;
+				cursor: pointer;
+			}
+
+			.animation-browser-item:hover,
+			.animation-browser-item:focus {
+				border-color: rgba(106, 186, 255, 0.8);
+				background: rgba(106, 186, 255, 0.14);
+			}
+
+			.animation-browser-hint {
+				padding: 8px;
+				color: rgba(243, 245, 247, 0.62);
+				font-size: 12px;
+				line-height: 1.35;
+			}
+		</style>
+	</head>
+	<body>
+		<canvas id="game"></canvas>
+		<div id="hud">
+			<div id="crosshair"></div>
+			<div id="loading">Loading test level...</div>
+			<div id="prompt" hidden>Click to capture mouse</div>
+			<div id="status-line">Preparing Bawk to the Future...</div>
+			<div id="position-line" hidden>X 0.00, Y 0.00</div>
+			<div id="console-panel" hidden>
+				<div id="console-log">Commands: animation-browser [on|off|toggle], add-model [name], play-animation [animation]</div>
+				<input
+					id="console-input"
+					type="text"
+					autocomplete="off"
+					autocapitalize="none"
+					spellcheck="false"
+				/>
+			</div>
+			<div id="animation-browser" hidden>
+				<div class="animation-browser-header">
+					<span>Animation Browser</span>
+					<button id="animation-browser-close" type="button" aria-label="Close animation browser">x</button>
+				</div>
+				<div class="animation-browser-columns">
+					<section class="animation-browser-column">
+						<h2>Female coworker</h2>
+						<input id="female-animation-search" class="animation-browser-search" type="text" autocomplete="off" />
+						<div id="female-animation-list" class="animation-browser-list"></div>
+					</section>
+					<section class="animation-browser-column">
+						<h2>Male executive</h2>
+						<input id="male-animation-search" class="animation-browser-search" type="text" autocomplete="off" />
+						<div id="male-animation-list" class="animation-browser-list"></div>
+					</section>
+				</div>
+			</div>
+		</div>
+		<script type="module" src="/game.js"></script>
+	</body>
+</html>

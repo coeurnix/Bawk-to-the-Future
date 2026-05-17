@@ -1,0 +1,34 @@
+{
+	"name": "test-sequence-1",
+	"points": {
+		"player-start": [-2, -8],
+		"player-look-target": [-2, -11, 1.4],
+		"exec-spawn": [-2, -11],
+		"exec-walk-target": [0, -10]
+	},
+	"npcs": {
+		"executive": {
+			"model": "npc-executive",
+			"point": "exec-spawn",
+			"hidden": true,
+			"idle": "m_idle_breathe_01"
+		}
+	},
+	"events": [
+		{ "at": 0, "type": "player-lock-movement" },
+		{ "at": 0, "type": "player-lock-view" },
+		{ "at": 0, "type": "player-teleport", "point": "player-start" },
+		{ "at": 0.1, "type": "player-face-towards", "point": "player-look-target" },
+		{ "at": 0.2, "type": "show-hint", "hint": "Sequence test started." },
+		{ "at": 0.4, "type": "npc-show", "npc": "executive" },
+		{ "at": 0.5, "type": "npc-face-towards", "npc": "executive", "point": "player-start" },
+		{ "at": 0.6, "type": "npc-look-at-player", "npc": "executive" },
+		{ "at": 1, "type": "npc-animate", "npc": "executive", "animation": "m_gestic_talk_relaxed_01" },
+		{ "at": 3, "type": "npc-walk", "npc": "executive", "point": "exec-walk-target", "duration": 2 },
+		{ "at": 3.1, "type": "play-sound", "sound": "test-sound" },
+		{ "at": 5.4, "type": "npc-look-at-player", "npc": "executive" },
+		{ "at": 6, "type": "hide-hint" },
+		{ "at": 6, "type": "player-unlock-view" },
+		{ "at": 6, "type": "player-unlock-movement" }
+	]
+}

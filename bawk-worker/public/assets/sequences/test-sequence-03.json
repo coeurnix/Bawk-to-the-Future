@@ -1,0 +1,25 @@
+{
+	"name": "test-sequence-03",
+	"points": {
+		"player-start": [21.21, -12.06],
+		"player-look-target": [19.65, -12.60, 1.4],
+		"walker-start": [19.65, -12.60],
+		"walker-target": [-12.83, -9.86]
+	},
+	"npcs": {
+		"walker": {
+			"model": "npc-executive",
+			"point": "walker-start",
+			"hidden": true,
+			"idle": "m_idle_breathe_01"
+		}
+	},
+	"events": [
+		{ "at": 0, "type": "player-teleport", "point": "player-start" },
+		{ "at": 0.1, "type": "player-face-towards", "point": "player-look-target" },
+		{ "at": 0.2, "type": "show-hint", "hint": "NPC pathfinding walk test." },
+		{ "at": 0.4, "type": "npc-show", "npc": "walker" },
+		{ "at": 0.5, "type": "npc-walk", "npc": "walker", "point": "walker-target", "speed": 1.6 },
+		{ "at": 18, "type": "hide-hint" }
+	]
+}
