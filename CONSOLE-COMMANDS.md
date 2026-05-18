@@ -16,6 +16,9 @@ Open or close the in-game console with `~`. Press `Tab` to complete command name
 - `play-sequence [sequence]`  
   Loads and runs a JSON sequence from `public/assets/sequences/[sequence].json`. Use `play-sequence test-sequence-1` for the general smoke test or `play-sequence test-sequence-2` for NPC head/eye tracking.
 
+- `say-talkfile [talkfile]`  
+  Plays a talkfile on the nearest visible NPC. Bare names load from `public/assets/talkfiles/[talkfile].json`; the paired MP3 is read from the talkfile's `audio` field or from the same path with `.mp3`.
+
 ## Animation
 
 - `play-animation [animation]`  

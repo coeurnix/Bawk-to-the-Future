@@ -80,6 +80,22 @@
 				font-variant-numeric: tabular-nums;
 			}
 
+			#caption-line {
+				position: absolute;
+				left: 50%;
+				bottom: 76px;
+				transform: translateX(-50%);
+				width: min(760px, calc(100vw - 36px));
+				padding: 10px 12px;
+				border-radius: 6px;
+				background: rgba(8, 10, 12, 0.72);
+				color: #f3f5f7;
+				font-size: 16px;
+				line-height: 1.35;
+				text-align: center;
+				text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+			}
+
 			#loading,
 			#prompt,
 			#console-panel {
@@ -246,6 +262,7 @@
 			<div id="loading">Loading test level...</div>
 			<div id="prompt" hidden>Click to capture mouse</div>
 			<div id="status-line">Preparing Bawk to the Future...</div>
+			<div id="caption-line" hidden></div>
 			<div id="position-line" hidden>X 0.00, Y 0.00</div>
 			<div id="console-panel" hidden>
 				<div id="console-log">Commands: animation-browser [on|off|toggle], add-model [name], play-animation [animation]</div>

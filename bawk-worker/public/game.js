@@ -17704,6 +17704,80 @@ var ImageBitmapLoader = class extends Loader {
     return this;
   }
 };
+var _context;
+var AudioContext2 = class {
+  /**
+   * Returns the global native audio context.
+   *
+   * @return {Window.AudioContext} The native audio context.
+   */
+  static getContext() {
+    if (_context === void 0) {
+      _context = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return _context;
+  }
+  /**
+   * Allows to set the global native audio context from outside.
+   *
+   * @param {Window.AudioContext} value - The native context to set.
+   */
+  static setContext(value) {
+    _context = value;
+  }
+};
+var AudioLoader = class extends Loader {
+  /**
+   * Constructs a new audio loader.
+   *
+   * @param {LoadingManager} [manager] - The loading manager.
+   */
+  constructor(manager) {
+    super(manager);
+  }
+  /**
+   * Starts loading from the given URL and passes the loaded audio buffer
+   * to the `onLoad()` callback.
+   *
+   * @param {string} url - The path/URL of the file to be loaded. This can also be a data URI.
+   * @param {function(AudioBuffer)} onLoad - Executed when the loading process has been finished.
+   * @param {onProgressCallback} onProgress - Executed while the loading is in progress.
+   * @param {onErrorCallback} onError - Executed when errors occur.
+   */
+  load(url, onLoad, onProgress, onError) {
+    const scope = this;
+    const loader = new FileLoader(this.manager);
+    loader.setResponseType("arraybuffer");
+    loader.setPath(this.path);
+    loader.setRequestHeader(this.requestHeader);
+    loader.setWithCredentials(this.withCredentials);
+    loader.load(url, function(buffer) {
+      try {
+        const bufferCopy = buffer.slice(0);
+        const context = AudioContext2.getContext();
+        const decodeUrl = url + "#decode";
+        scope.manager.itemStart(decodeUrl);
+        context.decodeAudioData(bufferCopy, function(audioBuffer) {
+          onLoad(audioBuffer);
+          scope.manager.itemEnd(decodeUrl);
+        }).catch(function(e) {
+          handleError(e);
+          scope.manager.itemEnd(decodeUrl);
+        });
+      } catch (e) {
+        handleError(e);
+      }
+    }, onProgress, onError);
+    function handleError(e) {
+      if (onError) {
+        onError(e);
+      } else {
+        error(e);
+      }
+      scope.manager.itemError(url);
+    }
+  }
+};
 var fov = -90;
 var aspect = 1;
 var CubeCamera = class extends Object3D {
@@ -17844,6 +17918,785 @@ var ArrayCamera = class extends PerspectiveCamera {
     this.isArrayCamera = true;
     this.isMultiViewCamera = false;
     this.cameras = array;
+  }
+};
+var Timer = class {
+  /**
+   * Constructs a new timer.
+   */
+  constructor() {
+    this._previousTime = 0;
+    this._currentTime = 0;
+    this._startTime = performance.now();
+    this._delta = 0;
+    this._elapsed = 0;
+    this._timescale = 1;
+    this._document = null;
+    this._pageVisibilityHandler = null;
+  }
+  /**
+   * Connect the timer to the given document.Calling this method is not mandatory to
+   * use the timer but enables the usage of the Page Visibility API to avoid large time
+   * delta values.
+   *
+   * @param {Document} document - The document.
+   */
+  connect(document2) {
+    this._document = document2;
+    if (document2.hidden !== void 0) {
+      this._pageVisibilityHandler = handleVisibilityChange.bind(this);
+      document2.addEventListener("visibilitychange", this._pageVisibilityHandler, false);
+    }
+  }
+  /**
+   * Disconnects the timer from the DOM and also disables the usage of the Page Visibility API.
+   */
+  disconnect() {
+    if (this._pageVisibilityHandler !== null) {
+      this._document.removeEventListener("visibilitychange", this._pageVisibilityHandler);
+      this._pageVisibilityHandler = null;
+    }
+    this._document = null;
+  }
+  /**
+   * Returns the time delta in seconds.
+   *
+   * @return {number} The time delta in second.
+   */
+  getDelta() {
+    return this._delta / 1e3;
+  }
+  /**
+   * Returns the elapsed time in seconds.
+   *
+   * @return {number} The elapsed time in second.
+   */
+  getElapsed() {
+    return this._elapsed / 1e3;
+  }
+  /**
+   * Returns the timescale.
+   *
+   * @return {number} The timescale.
+   */
+  getTimescale() {
+    return this._timescale;
+  }
+  /**
+   * Sets the given timescale which scale the time delta computation
+   * in `update()`.
+   *
+   * @param {number} timescale - The timescale to set.
+   * @return {Timer} A reference to this timer.
+   */
+  setTimescale(timescale) {
+    this._timescale = timescale;
+    return this;
+  }
+  /**
+   * Resets the time computation for the current simulation step.
+   *
+   * @return {Timer} A reference to this timer.
+   */
+  reset() {
+    this._currentTime = performance.now() - this._startTime;
+    return this;
+  }
+  /**
+   * Can be used to free all internal resources. Usually called when
+   * the timer instance isn't required anymore.
+   */
+  dispose() {
+    this.disconnect();
+  }
+  /**
+   * Updates the internal state of the timer. This method should be called
+   * once per simulation step and before you perform queries against the timer
+   * (e.g. via `getDelta()`).
+   *
+   * @param {number} timestamp - The current time in milliseconds. Can be obtained
+   * from the `requestAnimationFrame` callback argument. If not provided, the current
+   * time will be determined with `performance.now`.
+   * @return {Timer} A reference to this timer.
+   */
+  update(timestamp) {
+    if (this._pageVisibilityHandler !== null && this._document.hidden === true) {
+      this._delta = 0;
+    } else {
+      this._previousTime = this._currentTime;
+      this._currentTime = (timestamp !== void 0 ? timestamp : performance.now()) - this._startTime;
+      this._delta = (this._currentTime - this._previousTime) * this._timescale;
+      this._elapsed += this._delta;
+    }
+    return this;
+  }
+};
+function handleVisibilityChange() {
+  if (this._document.hidden === false) this.reset();
+}
+var _position$1 = /* @__PURE__ */ new Vector3();
+var _quaternion$1 = /* @__PURE__ */ new Quaternion();
+var _scale$1 = /* @__PURE__ */ new Vector3();
+var _forward = /* @__PURE__ */ new Vector3();
+var _up = /* @__PURE__ */ new Vector3();
+var AudioListener = class extends Object3D {
+  /**
+   * Constructs a new audio listener.
+   */
+  constructor() {
+    super();
+    this.type = "AudioListener";
+    this.context = AudioContext2.getContext();
+    this.gain = this.context.createGain();
+    this.gain.connect(this.context.destination);
+    this.filter = null;
+    this.timeDelta = 0;
+    this._timer = new Timer();
+  }
+  /**
+   * Returns the listener's input node.
+   *
+   * This method is used by other audio nodes to connect to this listener.
+   *
+   * @return {GainNode} The input node.
+   */
+  getInput() {
+    return this.gain;
+  }
+  /**
+   * Removes the current filter from this listener.
+   *
+   * @return {AudioListener} A reference to this listener.
+   */
+  removeFilter() {
+    if (this.filter !== null) {
+      this.gain.disconnect(this.filter);
+      this.filter.disconnect(this.context.destination);
+      this.gain.connect(this.context.destination);
+      this.filter = null;
+    }
+    return this;
+  }
+  /**
+   * Returns the current set filter.
+   *
+   * @return {?AudioNode} The filter.
+   */
+  getFilter() {
+    return this.filter;
+  }
+  /**
+   * Sets the given filter to this listener.
+   *
+   * @param {AudioNode} value - The filter to set.
+   * @return {AudioListener} A reference to this listener.
+   */
+  setFilter(value) {
+    if (this.filter !== null) {
+      this.gain.disconnect(this.filter);
+      this.filter.disconnect(this.context.destination);
+    } else {
+      this.gain.disconnect(this.context.destination);
+    }
+    this.filter = value;
+    this.gain.connect(this.filter);
+    this.filter.connect(this.context.destination);
+    return this;
+  }
+  /**
+   * Returns the applications master volume.
+   *
+   * @return {number} The master volume.
+   */
+  getMasterVolume() {
+    return this.gain.gain.value;
+  }
+  /**
+   * Sets the applications master volume. This volume setting affects
+   * all audio nodes in the scene.
+   *
+   * @param {number} value - The master volume to set.
+   * @return {AudioListener} A reference to this listener.
+   */
+  setMasterVolume(value) {
+    this.gain.gain.setTargetAtTime(value, this.context.currentTime, 0.01);
+    return this;
+  }
+  updateMatrixWorld(force) {
+    super.updateMatrixWorld(force);
+    this._timer.update();
+    const listener = this.context.listener;
+    this.timeDelta = this._timer.getDelta();
+    this.matrixWorld.decompose(_position$1, _quaternion$1, _scale$1);
+    _forward.set(0, 0, -1).applyQuaternion(_quaternion$1);
+    _up.set(0, 1, 0).applyQuaternion(_quaternion$1);
+    if (listener.positionX) {
+      const endTime = this.context.currentTime + this.timeDelta;
+      listener.positionX.linearRampToValueAtTime(_position$1.x, endTime);
+      listener.positionY.linearRampToValueAtTime(_position$1.y, endTime);
+      listener.positionZ.linearRampToValueAtTime(_position$1.z, endTime);
+      listener.forwardX.linearRampToValueAtTime(_forward.x, endTime);
+      listener.forwardY.linearRampToValueAtTime(_forward.y, endTime);
+      listener.forwardZ.linearRampToValueAtTime(_forward.z, endTime);
+      listener.upX.linearRampToValueAtTime(_up.x, endTime);
+      listener.upY.linearRampToValueAtTime(_up.y, endTime);
+      listener.upZ.linearRampToValueAtTime(_up.z, endTime);
+    } else {
+      listener.setPosition(_position$1.x, _position$1.y, _position$1.z);
+      listener.setOrientation(_forward.x, _forward.y, _forward.z, _up.x, _up.y, _up.z);
+    }
+  }
+};
+var Audio2 = class extends Object3D {
+  /**
+   * Constructs a new audio.
+   *
+   * @param {AudioListener} listener - The global audio listener.
+   */
+  constructor(listener) {
+    super();
+    this.type = "Audio";
+    this.listener = listener;
+    this.context = listener.context;
+    this.gain = this.context.createGain();
+    this.gain.connect(listener.getInput());
+    this.autoplay = false;
+    this.buffer = null;
+    this.detune = 0;
+    this.loop = false;
+    this.loopStart = 0;
+    this.loopEnd = 0;
+    this.offset = 0;
+    this.duration = void 0;
+    this.playbackRate = 1;
+    this.isPlaying = false;
+    this.hasPlaybackControl = true;
+    this.source = null;
+    this.sourceType = "empty";
+    this._startedAt = 0;
+    this._progress = 0;
+    this._connected = false;
+    this.filters = [];
+  }
+  /**
+   * Returns the output audio node.
+   *
+   * @return {GainNode} The output node.
+   */
+  getOutput() {
+    return this.gain;
+  }
+  /**
+   * Sets the given audio node as the source of this instance.
+   *
+   * {@link Audio#sourceType} is set to `audioNode` and {@link Audio#hasPlaybackControl} to `false`.
+   *
+   * @param {AudioNode} audioNode - The audio node like an instance of `OscillatorNode`.
+   * @return {Audio} A reference to this instance.
+   */
+  setNodeSource(audioNode) {
+    this.hasPlaybackControl = false;
+    this.sourceType = "audioNode";
+    this.source = audioNode;
+    this.connect();
+    return this;
+  }
+  /**
+   * Sets the given media element as the source of this instance.
+   *
+   * {@link Audio#sourceType} is set to `mediaNode` and {@link Audio#hasPlaybackControl} to `false`.
+   *
+   * @param {HTMLMediaElement} mediaElement - The media element.
+   * @return {Audio} A reference to this instance.
+   */
+  setMediaElementSource(mediaElement) {
+    this.hasPlaybackControl = false;
+    this.sourceType = "mediaNode";
+    this.source = this.context.createMediaElementSource(mediaElement);
+    this.connect();
+    return this;
+  }
+  /**
+   * Sets the given media stream as the source of this instance.
+   *
+   * {@link Audio#sourceType} is set to `mediaStreamNode` and {@link Audio#hasPlaybackControl} to `false`.
+   *
+   * @param {MediaStream} mediaStream - The media stream.
+   * @return {Audio} A reference to this instance.
+   */
+  setMediaStreamSource(mediaStream) {
+    this.hasPlaybackControl = false;
+    this.sourceType = "mediaStreamNode";
+    this.source = this.context.createMediaStreamSource(mediaStream);
+    this.connect();
+    return this;
+  }
+  /**
+   * Sets the given audio buffer as the source of this instance.
+   *
+   * {@link Audio#sourceType} is set to `buffer` and {@link Audio#hasPlaybackControl} to `true`.
+   *
+   * @param {AudioBuffer} audioBuffer - The audio buffer.
+   * @return {Audio} A reference to this instance.
+   */
+  setBuffer(audioBuffer) {
+    this.buffer = audioBuffer;
+    this.sourceType = "buffer";
+    if (this.autoplay) this.play();
+    return this;
+  }
+  /**
+   * Starts the playback of the audio.
+   *
+   * Can only be used with compatible audio sources that allow playback control.
+   *
+   * @param {number} [delay=0] - The delay, in seconds, at which the audio should start playing.
+   * @return {Audio|undefined} A reference to this instance.
+   */
+  play(delay = 0) {
+    if (this.isPlaying === true) {
+      warn("Audio: Audio is already playing.");
+      return;
+    }
+    if (this.hasPlaybackControl === false) {
+      warn("Audio: this Audio has no playback control.");
+      return;
+    }
+    this._startedAt = this.context.currentTime + delay;
+    const source = this.context.createBufferSource();
+    source.buffer = this.buffer;
+    source.loop = this.loop;
+    source.loopStart = this.loopStart;
+    source.loopEnd = this.loopEnd;
+    source.onended = this.onEnded.bind(this);
+    source.start(this._startedAt, this._progress + this.offset, this.duration);
+    this.isPlaying = true;
+    this.source = source;
+    this.setDetune(this.detune);
+    this.setPlaybackRate(this.playbackRate);
+    return this.connect();
+  }
+  /**
+   * Pauses the playback of the audio.
+   *
+   * Can only be used with compatible audio sources that allow playback control.
+   *
+   * @return {Audio|undefined} A reference to this instance.
+   */
+  pause() {
+    if (this.hasPlaybackControl === false) {
+      warn("Audio: this Audio has no playback control.");
+      return;
+    }
+    if (this.isPlaying === true) {
+      this._progress += Math.max(this.context.currentTime - this._startedAt, 0) * this.playbackRate;
+      if (this.loop === true) {
+        this._progress = this._progress % (this.duration || this.buffer.duration);
+      }
+      this.source.stop();
+      this.source.onended = null;
+      this.isPlaying = false;
+    }
+    return this;
+  }
+  /**
+   * Stops the playback of the audio.
+   *
+   * Can only be used with compatible audio sources that allow playback control.
+   *
+   * @param {number} [delay=0] - The delay, in seconds, at which the audio should stop playing.
+   * @return {Audio|undefined} A reference to this instance.
+   */
+  stop(delay = 0) {
+    if (this.hasPlaybackControl === false) {
+      warn("Audio: this Audio has no playback control.");
+      return;
+    }
+    this._progress = 0;
+    if (this.source !== null) {
+      this.source.stop(this.context.currentTime + delay);
+      this.source.onended = null;
+    }
+    this.isPlaying = false;
+    return this;
+  }
+  /**
+   * Connects to the audio source. This is used internally on
+   * initialisation and when setting / removing filters.
+   *
+   * @return {Audio} A reference to this instance.
+   */
+  connect() {
+    if (this.filters.length > 0) {
+      this.source.connect(this.filters[0]);
+      for (let i = 1, l = this.filters.length; i < l; i++) {
+        this.filters[i - 1].connect(this.filters[i]);
+      }
+      this.filters[this.filters.length - 1].connect(this.getOutput());
+    } else {
+      this.source.connect(this.getOutput());
+    }
+    this._connected = true;
+    return this;
+  }
+  /**
+   * Disconnects to the audio source. This is used internally on
+   * initialisation and when setting / removing filters.
+   *
+   * @return {Audio|undefined} A reference to this instance.
+   */
+  disconnect() {
+    if (this._connected === false) {
+      return;
+    }
+    if (this.filters.length > 0) {
+      this.source.disconnect(this.filters[0]);
+      for (let i = 1, l = this.filters.length; i < l; i++) {
+        this.filters[i - 1].disconnect(this.filters[i]);
+      }
+      this.filters[this.filters.length - 1].disconnect(this.getOutput());
+    } else {
+      this.source.disconnect(this.getOutput());
+    }
+    this._connected = false;
+    return this;
+  }
+  /**
+   * Returns the current set filters.
+   *
+   * @return {Array<AudioNode>} The list of filters.
+   */
+  getFilters() {
+    return this.filters;
+  }
+  /**
+   * Sets an array of filters and connects them with the audio source.
+   *
+   * @param {Array<AudioNode>} [value] - A list of filters.
+   * @return {Audio} A reference to this instance.
+   */
+  setFilters(value) {
+    if (!value) value = [];
+    if (this._connected === true) {
+      this.disconnect();
+      this.filters = value.slice();
+      this.connect();
+    } else {
+      this.filters = value.slice();
+    }
+    return this;
+  }
+  /**
+   * Defines the detuning of oscillation in cents.
+   *
+   * @param {number} value - The detuning of oscillation in cents.
+   * @return {Audio} A reference to this instance.
+   */
+  setDetune(value) {
+    this.detune = value;
+    if (this.isPlaying === true && this.source.detune !== void 0) {
+      this.source.detune.setTargetAtTime(this.detune, this.context.currentTime, 0.01);
+    }
+    return this;
+  }
+  /**
+   * Returns the detuning of oscillation in cents.
+   *
+   * @return {number} The detuning of oscillation in cents.
+   */
+  getDetune() {
+    return this.detune;
+  }
+  /**
+   * Returns the first filter in the list of filters.
+   *
+   * @return {AudioNode|undefined} The first filter in the list of filters.
+   */
+  getFilter() {
+    return this.getFilters()[0];
+  }
+  /**
+   * Applies a single filter node to the audio.
+   *
+   * @param {AudioNode} [filter] - The filter to set.
+   * @return {Audio} A reference to this instance.
+   */
+  setFilter(filter) {
+    return this.setFilters(filter ? [filter] : []);
+  }
+  /**
+   * Sets the playback rate.
+   *
+   * Can only be used with compatible audio sources that allow playback control.
+   *
+   * @param {number} [value] - The playback rate to set.
+   * @return {Audio|undefined} A reference to this instance.
+   */
+  setPlaybackRate(value) {
+    if (this.hasPlaybackControl === false) {
+      warn("Audio: this Audio has no playback control.");
+      return;
+    }
+    this.playbackRate = value;
+    if (this.isPlaying === true) {
+      this.source.playbackRate.setTargetAtTime(this.playbackRate, this.context.currentTime, 0.01);
+    }
+    return this;
+  }
+  /**
+  	 * Returns the current playback rate.
+  
+  	 * @return {number} The playback rate.
+  	 */
+  getPlaybackRate() {
+    return this.playbackRate;
+  }
+  /**
+   * Automatically called when playback finished.
+   */
+  onEnded() {
+    this.isPlaying = false;
+    this._progress = 0;
+  }
+  /**
+   * Returns the loop flag.
+   *
+   * Can only be used with compatible audio sources that allow playback control.
+   *
+   * @return {boolean} Whether the audio should loop or not.
+   */
+  getLoop() {
+    if (this.hasPlaybackControl === false) {
+      warn("Audio: this Audio has no playback control.");
+      return false;
+    }
+    return this.loop;
+  }
+  /**
+   * Sets the loop flag.
+   *
+   * Can only be used with compatible audio sources that allow playback control.
+   *
+   * @param {boolean} value - Whether the audio should loop or not.
+   * @return {Audio|undefined} A reference to this instance.
+   */
+  setLoop(value) {
+    if (this.hasPlaybackControl === false) {
+      warn("Audio: this Audio has no playback control.");
+      return;
+    }
+    this.loop = value;
+    if (this.isPlaying === true) {
+      this.source.loop = this.loop;
+    }
+    return this;
+  }
+  /**
+   * Sets the loop start value which defines where in the audio buffer the replay should
+   * start, in seconds.
+   *
+   * @param {number} value - The loop start value.
+   * @return {Audio} A reference to this instance.
+   */
+  setLoopStart(value) {
+    this.loopStart = value;
+    return this;
+  }
+  /**
+   * Sets the loop end value which defines where in the audio buffer the replay should
+   * stop, in seconds.
+   *
+   * @param {number} value - The loop end value.
+   * @return {Audio} A reference to this instance.
+   */
+  setLoopEnd(value) {
+    this.loopEnd = value;
+    return this;
+  }
+  /**
+   * Returns the volume.
+   *
+   * @return {number} The volume.
+   */
+  getVolume() {
+    return this.gain.gain.value;
+  }
+  /**
+   * Sets the volume.
+   *
+   * @param {number} value - The volume to set.
+   * @return {Audio} A reference to this instance.
+   */
+  setVolume(value) {
+    this.gain.gain.setTargetAtTime(value, this.context.currentTime, 0.01);
+    return this;
+  }
+  copy(source, recursive) {
+    super.copy(source, recursive);
+    if (source.sourceType !== "buffer") {
+      warn("Audio: Audio source type cannot be copied.");
+      return this;
+    }
+    this.autoplay = source.autoplay;
+    this.buffer = source.buffer;
+    this.detune = source.detune;
+    this.loop = source.loop;
+    this.loopStart = source.loopStart;
+    this.loopEnd = source.loopEnd;
+    this.offset = source.offset;
+    this.duration = source.duration;
+    this.playbackRate = source.playbackRate;
+    this.hasPlaybackControl = source.hasPlaybackControl;
+    this.sourceType = source.sourceType;
+    this.filters = source.filters.slice();
+    return this;
+  }
+  clone(recursive) {
+    return new this.constructor(this.listener).copy(this, recursive);
+  }
+};
+var _position = /* @__PURE__ */ new Vector3();
+var _quaternion = /* @__PURE__ */ new Quaternion();
+var _scale = /* @__PURE__ */ new Vector3();
+var _orientation = /* @__PURE__ */ new Vector3();
+var PositionalAudio = class extends Audio2 {
+  /**
+   * Constructs a positional audio.
+   *
+   * @param {AudioListener} listener - The global audio listener.
+   */
+  constructor(listener) {
+    super(listener);
+    this.panner = this.context.createPanner();
+    this.panner.panningModel = "HRTF";
+    this.panner.connect(this.gain);
+  }
+  connect() {
+    super.connect();
+    this.panner.connect(this.gain);
+    return this;
+  }
+  disconnect() {
+    super.disconnect();
+    this.panner.disconnect(this.gain);
+    return this;
+  }
+  getOutput() {
+    return this.panner;
+  }
+  /**
+   * Returns the current reference distance.
+   *
+   * @return {number} The reference distance.
+   */
+  getRefDistance() {
+    return this.panner.refDistance;
+  }
+  /**
+   * Defines the reference distance for reducing volume as the audio source moves
+   * further from the listener – i.e. the distance at which the volume reduction
+   * starts taking effect.
+   *
+   * @param {number} value - The reference distance to set.
+   * @return {PositionalAudio} A reference to this instance.
+   */
+  setRefDistance(value) {
+    this.panner.refDistance = value;
+    return this;
+  }
+  /**
+   * Returns the current rolloff factor.
+   *
+   * @return {number} The rolloff factor.
+   */
+  getRolloffFactor() {
+    return this.panner.rolloffFactor;
+  }
+  /**
+   * Defines how quickly the volume is reduced as the source moves away from the listener.
+   *
+   * @param {number} value - The rolloff factor.
+   * @return {PositionalAudio} A reference to this instance.
+   */
+  setRolloffFactor(value) {
+    this.panner.rolloffFactor = value;
+    return this;
+  }
+  /**
+   * Returns the current distance model.
+   *
+   * @return {('linear'|'inverse'|'exponential')} The distance model.
+   */
+  getDistanceModel() {
+    return this.panner.distanceModel;
+  }
+  /**
+   * Defines which algorithm to use to reduce the volume of the audio source
+   * as it moves away from the listener.
+   *
+   * Read [the spec](https://www.w3.org/TR/webaudio-1.1/#enumdef-distancemodeltype)
+   * for more details.
+   *
+   * @param {('linear'|'inverse'|'exponential')} value - The distance model to set.
+   * @return {PositionalAudio} A reference to this instance.
+   */
+  setDistanceModel(value) {
+    this.panner.distanceModel = value;
+    return this;
+  }
+  /**
+   * Returns the current max distance.
+   *
+   * @return {number} The max distance.
+   */
+  getMaxDistance() {
+    return this.panner.maxDistance;
+  }
+  /**
+   * Defines the maximum distance between the audio source and the listener,
+   * after which the volume is not reduced any further.
+   *
+   * This value is used only by the `linear` distance model.
+   *
+   * @param {number} value - The max distance.
+   * @return {PositionalAudio} A reference to this instance.
+   */
+  setMaxDistance(value) {
+    this.panner.maxDistance = value;
+    return this;
+  }
+  /**
+   * Sets the directional cone in which the audio can be listened.
+   *
+   * @param {number} coneInnerAngle - An angle, in degrees, of a cone inside of which there will be no volume reduction.
+   * @param {number} coneOuterAngle - An angle, in degrees, of a cone outside of which the volume will be reduced by a constant value, defined by the `coneOuterGain` parameter.
+   * @param {number} coneOuterGain - The amount of volume reduction outside the cone defined by the `coneOuterAngle`. When set to `0`, no sound can be heard.
+   * @return {PositionalAudio} A reference to this instance.
+   */
+  setDirectionalCone(coneInnerAngle, coneOuterAngle, coneOuterGain) {
+    this.panner.coneInnerAngle = coneInnerAngle;
+    this.panner.coneOuterAngle = coneOuterAngle;
+    this.panner.coneOuterGain = coneOuterGain;
+    return this;
+  }
+  updateMatrixWorld(force) {
+    super.updateMatrixWorld(force);
+    if (this.hasPlaybackControl === true && this.isPlaying === false) return;
+    this.matrixWorld.decompose(_position, _quaternion, _scale);
+    _orientation.set(0, 0, 1).applyQuaternion(_quaternion);
+    const panner = this.panner;
+    if (panner.positionX) {
+      const endTime = this.context.currentTime + this.listener.timeDelta;
+      panner.positionX.linearRampToValueAtTime(_position.x, endTime);
+      panner.positionY.linearRampToValueAtTime(_position.y, endTime);
+      panner.positionZ.linearRampToValueAtTime(_position.z, endTime);
+      panner.orientationX.linearRampToValueAtTime(_orientation.x, endTime);
+      panner.orientationY.linearRampToValueAtTime(_orientation.y, endTime);
+      panner.orientationZ.linearRampToValueAtTime(_orientation.z, endTime);
+    } else {
+      panner.setPosition(_position.x, _position.y, _position.z);
+      panner.setOrientation(_orientation.x, _orientation.y, _orientation.z);
+    }
   }
 };
 var PropertyMixer = class {
@@ -32922,11 +33775,11 @@ var GLTFCubicSplineInterpolant = class extends Interpolant {
     return result;
   }
 };
-var _quaternion = new Quaternion();
+var _quaternion2 = new Quaternion();
 var GLTFCubicSplineQuaternionInterpolant = class extends GLTFCubicSplineInterpolant {
   interpolate_(i1, t0, t, t1) {
     const result = super.interpolate_(i1, t0, t, t1);
-    _quaternion.fromArray(result).normalize().toArray(result);
+    _quaternion2.fromArray(result).normalize().toArray(result);
     return result;
   }
 };
@@ -35375,11 +36228,34 @@ var HEAD_INCLINATION_SCALE = 0;
 var EYE_VERTICAL_GAIN = 0.12;
 var EYE_HORIZONTAL_GAIN = 0.9;
 var PLAYER_GAZE_TARGET_Y_OFFSET = -0.45;
+var TALKFILE_TWEEN_SECONDS = 0.18;
+var TALKFILE_SMOOTH_LAMBDA = 14;
+var TALKFILE_ROOT = "/assets/talkfiles";
+var TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
+var VISEME_MORPH_TARGETS = [
+  "AA_VI_00_Sil",
+  "AA_VI_01_PP",
+  "AA_VI_02_FF",
+  "AA_VI_03_TH",
+  "AA_VI_04_DD",
+  "AA_VI_05_KK",
+  "AA_VI_06_CH",
+  "AA_VI_07_SS",
+  "AA_VI_08_nn",
+  "AA_VI_09_RR",
+  "AA_VI_10_aa",
+  "AA_VI_11_E",
+  "AA_VI_12_I",
+  "AA_VI_13_O",
+  "AA_VI_14_U"
+];
+var TALK_MORPH_TARGETS = [...VISEME_MORPH_TARGETS, TALK_JAW_OPEN_TARGET];
 var DEFAULT_STATUS_TEXT = "WASD move, mouse look, Shift sprint, Space jump, C crouch, E/LMB interact, ~ console, R reset";
 var canvas = document.querySelector("#game");
 var loading2 = document.querySelector("#loading");
 var prompt = document.querySelector("#prompt");
 var statusLine = document.querySelector("#status-line");
+var captionLine = document.querySelector("#caption-line");
 var positionLine = document.querySelector("#position-line");
 var consolePanel = document.querySelector("#console-panel");
 var consoleInput = document.querySelector("#console-input");
@@ -35390,7 +36266,7 @@ var femaleAnimationList = document.querySelector("#female-animation-list");
 var maleAnimationList = document.querySelector("#male-animation-list");
 var femaleAnimationSearch = document.querySelector("#female-animation-search");
 var maleAnimationSearch = document.querySelector("#male-animation-search");
-if (!canvas || !loading2 || !prompt || !statusLine || !positionLine || !consolePanel || !consoleInput || !consoleLog || !animationBrowser || !animationBrowserClose || !femaleAnimationList || !maleAnimationList || !femaleAnimationSearch || !maleAnimationSearch) {
+if (!canvas || !loading2 || !prompt || !statusLine || !captionLine || !positionLine || !consolePanel || !consoleInput || !consoleLog || !animationBrowser || !animationBrowserClose || !femaleAnimationList || !maleAnimationList || !femaleAnimationSearch || !maleAnimationSearch) {
   throw new Error("Game shell is missing required DOM nodes.");
 }
 var renderer = new WebGLRenderer({ canvas, antialias: true });
@@ -35406,6 +36282,8 @@ camera.rotation.order = "YXZ";
 var ambientLight = new AmbientLight(16777215, DEFAULT_AMBIENT_INTENSITY);
 scene.add(ambientLight);
 scene.add(camera);
+var audioListener = new AudioListener();
+camera.add(audioListener);
 var worldOctree = new Octree();
 var floorRaycaster = new Raycaster();
 var levelMeshes = [];
@@ -35459,6 +36337,7 @@ var consoleCommands = [
   "npc-fill",
   "play-sequence",
   "play-animation",
+  "say-talkfile",
   "show-position",
   "hide-position",
   "stop-animations",
@@ -35468,8 +36347,11 @@ var npcMaterials = /* @__PURE__ */ new Set();
 var npcs = [];
 var npcsById = /* @__PURE__ */ new Map();
 var sequenceCache = /* @__PURE__ */ new Map();
+var talkfileCache = /* @__PURE__ */ new Map();
 var activeSequences = [];
+var activeTalks = [];
 var audioCache = /* @__PURE__ */ new Map();
+var talkAudioCache = /* @__PURE__ */ new Map();
 var chairs = [];
 var staticCylinders = [];
 var staticBoxes = [];
@@ -36127,6 +37009,10 @@ function setPositionVisible(visible) {
 function setConsoleLog(text) {
   consoleLog.textContent = text;
 }
+function setCaption(text) {
+  captionLine.textContent = text;
+  captionLine.hidden = text.trim() === "";
+}
 function animationNames(prefix) {
   return animationManifest.filter((name) => name.startsWith(prefix)).sort();
 }
@@ -36187,14 +37073,14 @@ function parseNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 function formatCommandHelp() {
-  return "Commands: add-model [name], animation-browser [on|off|toggle], play-sequence [sequence], play-animation [animation], loop-animation [animation], stop-animations, lighting [ambient], npc-fill [intensity], show-position, hide-position, teleport [x] [y]";
+  return "Commands: add-model [name], animation-browser [on|off|toggle], play-sequence [sequence], play-animation [animation], loop-animation [animation], say-talkfile [talkfile], stop-animations, lighting [ambient], npc-fill [intensity], show-position, hide-position, teleport [x] [y]";
 }
 function completeConsoleInput() {
   const beforeCursor = consoleInput.value.slice(0, consoleInput.selectionStart ?? consoleInput.value.length);
   const parts = beforeCursor.trimStart().split(/\s+/);
   const endsWithSpace = /\s$/.test(beforeCursor);
   const commandName = parts[0] ?? "";
-  const candidates = commandName === "add-model" && parts.length === 2 && !endsWithSpace ? Array.from(availableModels) : commandName === "animation-browser" && parts.length === 2 && !endsWithSpace ? ["off", "on", "toggle"] : ["loop-animation", "play-animation"].includes(commandName) && parts.length === 2 && !endsWithSpace ? Array.from(availableAnimations) : commandName === "play-sequence" && parts.length === 2 && !endsWithSpace ? Array.from(availableSequences) : parts.length <= 1 && !endsWithSpace ? consoleCommands : [];
+  const candidates = commandName === "add-model" && parts.length === 2 && !endsWithSpace ? Array.from(availableModels) : commandName === "animation-browser" && parts.length === 2 && !endsWithSpace ? ["off", "on", "toggle"] : ["loop-animation", "play-animation"].includes(commandName) && parts.length === 2 && !endsWithSpace ? Array.from(availableAnimations) : commandName === "play-sequence" && parts.length === 2 && !endsWithSpace ? Array.from(availableSequences) : commandName === "say-talkfile" && parts.length === 2 && !endsWithSpace ? [] : parts.length <= 1 && !endsWithSpace ? consoleCommands : [];
   const token = endsWithSpace ? "" : parts.at(-1) ?? "";
   const matches = candidates.filter((candidate) => candidate.startsWith(token));
   if (matches.length === 0) {
@@ -36270,6 +37156,26 @@ function findNpcGaze(root) {
     target: null,
     eyeMesh
   };
+}
+function findNpcTalkRig(root) {
+  const visemeMeshes = [];
+  root.traverse((object) => {
+    const mesh = object;
+    if (!mesh.isMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) {
+      return;
+    }
+    const indices = /* @__PURE__ */ new Map();
+    for (const morphTarget of TALK_MORPH_TARGETS) {
+      const index = mesh.morphTargetDictionary[morphTarget];
+      if (index !== void 0) {
+        indices.set(morphTarget, index);
+      }
+    }
+    if (indices.size > 0) {
+      visemeMeshes.push({ mesh, indices });
+    }
+  });
+  return { visemeMeshes };
 }
 async function loadAnimationManifest() {
   try {
@@ -36389,6 +37295,7 @@ async function addModel(name, spawnOverride, options = {}) {
     mixer: new AnimationMixer(instance),
     modelName: name,
     root: instance,
+    talk: findNpcTalkRig(instance),
     walk: null
   };
   await setNpcIdleAnimation(npc, defaultNpcIdleAnimation(npc));
@@ -36629,6 +37536,203 @@ function getAudio(name) {
   audio.preload = "auto";
   audioCache.set(name, audio);
   return audio.cloneNode(true);
+}
+function talkfileUrl(name) {
+  if (name.startsWith("/")) {
+    return name;
+  }
+  if (name.includes("/")) {
+    return name.endsWith(".json") ? name : `${name}.json`;
+  }
+  return `${TALKFILE_ROOT}/${name.endsWith(".json") ? name : `${name}.json`}`;
+}
+function talkfileAudioUrl(talkfilePath, talkfile) {
+  if (talkfile.audio) {
+    if (talkfile.audio.startsWith("/")) {
+      return talkfile.audio;
+    }
+    return new URL(talkfile.audio, window.location.origin + talkfilePath).pathname;
+  }
+  return talkfilePath.replace(/\.json(?:$|\?)/, ".mp3");
+}
+function isTalkfileCue(value) {
+  return isObject(value) && typeof value.start === "number" && Number.isFinite(value.start) && typeof value.end === "number" && Number.isFinite(value.end) && typeof value.shape === "string" && typeof value.morphTarget === "string" && VISEME_MORPH_TARGETS.includes(value.morphTarget) && (value.jawOpen === void 0 || typeof value.jawOpen === "number" && Number.isFinite(value.jawOpen)) && (value.volume === void 0 || typeof value.volume === "number" && Number.isFinite(value.volume));
+}
+function validateTalkfile(value) {
+  if (!isObject(value) || typeof value.caption !== "string" || typeof value.duration !== "number") {
+    throw new Error("Talkfile JSON must include caption and duration.");
+  }
+  const rawCues = Array.isArray(value.cues) ? value.cues : Array.isArray(value.visemes) ? value.visemes : null;
+  if (!rawCues) {
+    throw new Error("Talkfile JSON must include a cues array.");
+  }
+  const cues = rawCues.filter(isTalkfileCue).sort((a, b) => a.start - b.start);
+  if (cues.length !== rawCues.length) {
+    throw new Error("Talkfile has invalid cue entries.");
+  }
+  return {
+    audio: typeof value.audio === "string" ? value.audio : void 0,
+    caption: value.caption,
+    duration: Math.max(0, value.duration),
+    cues,
+    tweenSeconds: typeof value.tweenSeconds === "number" && Number.isFinite(value.tweenSeconds) ? Math.max(0, value.tweenSeconds) : void 0
+  };
+}
+async function loadTalkfile(name) {
+  const url = talkfileUrl(name);
+  const cached = talkfileCache.get(url);
+  if (cached) {
+    return { talkfile: cached, url };
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const talkfile = validateTalkfile(await response.json());
+  talkfileCache.set(url, talkfile);
+  return { talkfile, url };
+}
+async function loadTalkAudio(url) {
+  const cached = talkAudioCache.get(url);
+  if (cached) {
+    return cached;
+  }
+  const loader = new AudioLoader();
+  const buffer = await loader.loadAsync(url);
+  talkAudioCache.set(url, buffer);
+  return buffer;
+}
+function resetNpcVisemes(npc) {
+  for (const entry of npc.talk.visemeMeshes) {
+    const influences = entry.mesh.morphTargetInfluences;
+    if (!influences) {
+      continue;
+    }
+    for (const index of entry.indices.values()) {
+      influences[index] = 0;
+    }
+  }
+}
+function nearestNpcToPlayer() {
+  const feet = feetPosition();
+  let nearest = null;
+  let nearestDistanceSq = Infinity;
+  for (const npc of npcs) {
+    if (!npc.root.visible) {
+      continue;
+    }
+    const distanceSq = npc.root.position.distanceToSquared(feet);
+    if (distanceSq < nearestDistanceSq) {
+      nearest = npc;
+      nearestDistanceSq = distanceSq;
+    }
+  }
+  return nearest;
+}
+async function playTalkfileOnNpc(npc, name) {
+  const { talkfile, url } = await loadTalkfile(name);
+  if (npc.talk.visemeMeshes.length === 0) {
+    throw new Error(`NPC "${npc.id ?? npc.modelName}" has no RocketBox viseme morph targets.`);
+  }
+  const buffer = await loadTalkAudio(talkfileAudioUrl(url, talkfile));
+  const audio = new PositionalAudio(audioListener);
+  audio.setBuffer(buffer);
+  audio.setRefDistance(1);
+  audio.setRolloffFactor(0);
+  audio.setDistanceModel("linear");
+  audio.setLoop(false);
+  npc.root.add(audio);
+  resetNpcVisemes(npc);
+  setCaption(talkfile.caption);
+  audio.play();
+  activeTalks.push({
+    audio,
+    caption: talkfile.caption,
+    cues: talkfile.cues,
+    duration: talkfile.duration,
+    npc,
+    currentWeights: /* @__PURE__ */ new Map(),
+    startedAt: audio.context.currentTime,
+    tweenSeconds: talkfile.tweenSeconds ?? TALKFILE_TWEEN_SECONDS
+  });
+  setConsoleLog(`Playing talkfile "${name}" on ${npc.id ?? npc.modelName}.`);
+}
+function cueAt(cues, time) {
+  for (let index = 0; index < cues.length; index += 1) {
+    const cue = cues[index];
+    if (time >= cue.start && time < cue.end) {
+      return { cue, index };
+    }
+  }
+  return null;
+}
+function addVisemeWeight(weights, morphTarget, weight) {
+  weights.set(morphTarget, Math.max(weights.get(morphTarget) ?? 0, MathUtils.clamp(weight, 0, 1)));
+}
+function addCueWeights(weights, cue, weight) {
+  addVisemeWeight(weights, cue.morphTarget, weight);
+  if (cue.jawOpen && cue.jawOpen > 0) {
+    addVisemeWeight(weights, TALK_JAW_OPEN_TARGET, cue.jawOpen * weight);
+  }
+}
+function visemeWeightsAt(cues, time, tweenSeconds) {
+  const weights = /* @__PURE__ */ new Map();
+  const active = cueAt(cues, time);
+  if (!active) {
+    addVisemeWeight(weights, "AA_VI_00_Sil", 1);
+    return weights;
+  }
+  const cue = active.cue;
+  const previous = cues[active.index - 1];
+  const next = cues[active.index + 1];
+  let currentWeight = 1;
+  if (tweenSeconds > 0 && previous && time - cue.start < tweenSeconds) {
+    const progress = MathUtils.clamp((time - cue.start) / tweenSeconds, 0, 1);
+    addCueWeights(weights, previous, 1 - progress);
+    currentWeight = Math.min(currentWeight, progress);
+  }
+  if (tweenSeconds > 0 && next && cue.end - time < tweenSeconds) {
+    const progress = MathUtils.clamp((tweenSeconds - (cue.end - time)) / tweenSeconds, 0, 1);
+    addCueWeights(weights, next, progress);
+    currentWeight = Math.min(currentWeight, 1 - progress);
+  }
+  addCueWeights(weights, cue, currentWeight);
+  return weights;
+}
+function smoothTalkWeights(talk, targetWeights, deltaTime) {
+  for (const morphTarget of TALK_MORPH_TARGETS) {
+    const current = talk.currentWeights.get(morphTarget) ?? 0;
+    const target = targetWeights.get(morphTarget) ?? 0;
+    const next = MathUtils.damp(current, target, TALKFILE_SMOOTH_LAMBDA, deltaTime);
+    talk.currentWeights.set(morphTarget, next < 1e-3 ? 0 : next);
+  }
+}
+function applyNpcVisemes(npc, weights) {
+  for (const entry of npc.talk.visemeMeshes) {
+    const influences = entry.mesh.morphTargetInfluences;
+    if (!influences) {
+      continue;
+    }
+    for (const [morphTarget, index] of entry.indices) {
+      influences[index] = weights.get(morphTarget) ?? 0;
+    }
+  }
+}
+function updateActiveTalks(deltaTime) {
+  for (let index = activeTalks.length - 1; index >= 0; index -= 1) {
+    const talk = activeTalks[index];
+    const elapsed = talk.audio.context.currentTime - talk.startedAt;
+    if (!talk.audio.isPlaying || elapsed >= talk.duration + talk.tweenSeconds) {
+      talk.audio.stop();
+      talk.audio.removeFromParent();
+      resetNpcVisemes(talk.npc);
+      activeTalks.splice(index, 1);
+      setCaption(activeTalks.at(-1)?.caption ?? "");
+      continue;
+    }
+    smoothTalkWeights(talk, visemeWeightsAt(talk.cues, elapsed, talk.tweenSeconds), deltaTime);
+    applyNpcVisemes(talk.npc, talk.currentWeights);
+  }
 }
 function fadeAudio(audio, from, to, seconds, onDone) {
   audio.volume = from;
@@ -36989,9 +38093,11 @@ async function runSequenceEvent(sequence, event) {
       npc.root.userData.emotion = sequenceEventString(event, "emotion");
       return;
     }
-    case "npc-talk":
-      setConsoleLog("npc-talk needs talkfile format, subtitle timing, lipsync target, and audio path conventions.");
+    case "npc-talk": {
+      const npc = await ensureSequenceNpc(sequenceEventString(event, "npc"), sequence);
+      await playTalkfileOnNpc(npc, sequenceEventString(event, "talkfile"));
       return;
+    }
     default:
       setConsoleLog(`Unsupported sequence event "${event.type}".`);
   }
@@ -37241,6 +38347,23 @@ async function runConsoleCommand(rawCommand) {
       }
       return;
     }
+    case "say-talkfile": {
+      if (args.length !== 1) {
+        setConsoleLog("Usage: say-talkfile [talkfile]");
+        return;
+      }
+      const npc = nearestNpcToPlayer();
+      if (!npc) {
+        setConsoleLog("No visible NPCs in scene. Add one with add-model [name].");
+        return;
+      }
+      try {
+        await playTalkfileOnNpc(npc, args[0]);
+      } catch (error2) {
+        setConsoleLog(`Could not play talkfile "${args[0]}": ${String(error2)}`);
+      }
+      return;
+    }
     case "show-position": {
       if (args.length !== 0) {
         setConsoleLog("Usage: show-position");
@@ -37452,6 +38575,7 @@ function animate() {
     for (const npc of npcs) {
       npc.mixer.update(deltaTime);
     }
+    updateActiveTalks(deltaTime);
     updateNpcGazes(deltaTime);
     updatePositionLine();
   }

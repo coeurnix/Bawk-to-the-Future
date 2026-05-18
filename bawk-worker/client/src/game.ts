@@ -55,6 +55,28 @@ const HEAD_INCLINATION_SCALE = 0;
 const EYE_VERTICAL_GAIN = 0.12;
 const EYE_HORIZONTAL_GAIN = 0.9;
 const PLAYER_GAZE_TARGET_Y_OFFSET = -0.45;
+const TALKFILE_TWEEN_SECONDS = 0.18;
+const TALKFILE_SMOOTH_LAMBDA = 14;
+const TALKFILE_ROOT = "/assets/talkfiles";
+const TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
+const VISEME_MORPH_TARGETS = [
+	"AA_VI_00_Sil",
+	"AA_VI_01_PP",
+	"AA_VI_02_FF",
+	"AA_VI_03_TH",
+	"AA_VI_04_DD",
+	"AA_VI_05_KK",
+	"AA_VI_06_CH",
+	"AA_VI_07_SS",
+	"AA_VI_08_nn",
+	"AA_VI_09_RR",
+	"AA_VI_10_aa",
+	"AA_VI_11_E",
+	"AA_VI_12_I",
+	"AA_VI_13_O",
+	"AA_VI_14_U",
+] as const;
+const TALK_MORPH_TARGETS = [...VISEME_MORPH_TARGETS, TALK_JAW_OPEN_TARGET] as const;
 const DEFAULT_STATUS_TEXT =
 	"WASD move, mouse look, Shift sprint, Space jump, C crouch, E/LMB interact, ~ console, R reset";
 
@@ -62,6 +84,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const loading = document.querySelector<HTMLDivElement>("#loading");
 const prompt = document.querySelector<HTMLDivElement>("#prompt");
 const statusLine = document.querySelector<HTMLDivElement>("#status-line");
+const captionLine = document.querySelector<HTMLDivElement>("#caption-line");
 const positionLine = document.querySelector<HTMLDivElement>("#position-line");
 const consolePanel = document.querySelector<HTMLDivElement>("#console-panel");
 const consoleInput = document.querySelector<HTMLInputElement>("#console-input");
@@ -78,6 +101,7 @@ if (
 	!loading ||
 	!prompt ||
 	!statusLine ||
+	!captionLine ||
 	!positionLine ||
 	!consolePanel ||
 	!consoleInput ||
@@ -109,6 +133,8 @@ const ambientLight = new THREE.AmbientLight(0xffffff, DEFAULT_AMBIENT_INTENSITY)
 scene.add(ambientLight);
 
 scene.add(camera);
+const audioListener = new THREE.AudioListener();
+camera.add(audioListener);
 
 const worldOctree = new Octree();
 const floorRaycaster = new THREE.Raycaster();
@@ -163,6 +189,7 @@ const consoleCommands = [
 	"npc-fill",
 	"play-sequence",
 	"play-animation",
+	"say-talkfile",
 	"show-position",
 	"hide-position",
 	"stop-animations",
@@ -172,8 +199,11 @@ const npcMaterials = new Set<THREE.Material>();
 const npcs: NpcInstance[] = [];
 const npcsById = new Map<string, NpcInstance>();
 const sequenceCache = new Map<string, SequenceDefinition>();
+const talkfileCache = new Map<string, Talkfile>();
 const activeSequences: ActiveSequence[] = [];
+const activeTalks: ActiveTalk[] = [];
 const audioCache = new Map<string, HTMLAudioElement>();
+const talkAudioCache = new Map<string, AudioBuffer>();
 const chairs: ChairInstance[] = [];
 const staticCylinders: CylinderCollider[] = [];
 const staticBoxes: BoxCollider[] = [];
@@ -982,6 +1012,15 @@ type NpcGaze = {
 	eyeMesh: THREE.Mesh | null;
 };
 
+type NpcVisemeMesh = {
+	mesh: THREE.Mesh;
+	indices: Map<string, number>;
+};
+
+type NpcTalkRig = {
+	visemeMeshes: NpcVisemeMesh[];
+};
+
 type NpcInstance = {
 	action: THREE.AnimationAction | null;
 	gaze: NpcGaze;
@@ -991,7 +1030,36 @@ type NpcInstance = {
 	mixer: THREE.AnimationMixer;
 	modelName: string;
 	root: THREE.Group;
+	talk: NpcTalkRig;
 	walk: NpcWalk | null;
+};
+
+type TalkfileCue = {
+	start: number;
+	end: number;
+	shape: string;
+	morphTarget: string;
+	jawOpen?: number;
+	volume?: number;
+};
+
+type Talkfile = {
+	audio?: string;
+	caption: string;
+	duration: number;
+	cues: TalkfileCue[];
+	tweenSeconds?: number;
+};
+
+type ActiveTalk = {
+	audio: THREE.PositionalAudio;
+	caption: string;
+	cues: TalkfileCue[];
+	duration: number;
+	npc: NpcInstance;
+	currentWeights: Map<string, number>;
+	startedAt: number;
+	tweenSeconds: number;
 };
 
 let playerOnFloor = false;
@@ -1031,6 +1099,11 @@ function setPositionVisible(visible: boolean) {
 
 function setConsoleLog(text: string) {
 	consoleLog.textContent = text;
+}
+
+function setCaption(text: string) {
+	captionLine.textContent = text;
+	captionLine.hidden = text.trim() === "";
 }
 
 function animationNames(prefix: "f_" | "m_") {
@@ -1106,7 +1179,7 @@ function parseNumber(value: string) {
 }
 
 function formatCommandHelp() {
-	return "Commands: add-model [name], animation-browser [on|off|toggle], play-sequence [sequence], play-animation [animation], loop-animation [animation], stop-animations, lighting [ambient], npc-fill [intensity], show-position, hide-position, teleport [x] [y]";
+	return "Commands: add-model [name], animation-browser [on|off|toggle], play-sequence [sequence], play-animation [animation], loop-animation [animation], say-talkfile [talkfile], stop-animations, lighting [ambient], npc-fill [intensity], show-position, hide-position, teleport [x] [y]";
 }
 
 function completeConsoleInput() {
@@ -1123,6 +1196,8 @@ function completeConsoleInput() {
 				? Array.from(availableAnimations)
 			: commandName === "play-sequence" && parts.length === 2 && !endsWithSpace
 				? Array.from(availableSequences)
+			: commandName === "say-talkfile" && parts.length === 2 && !endsWithSpace
+				? []
 			: parts.length <= 1 && !endsWithSpace
 				? consoleCommands
 				: [];
@@ -1209,6 +1284,29 @@ function findNpcGaze(root: THREE.Group): NpcGaze {
 		target: null,
 		eyeMesh,
 	};
+}
+
+function findNpcTalkRig(root: THREE.Group): NpcTalkRig {
+	const visemeMeshes: NpcVisemeMesh[] = [];
+
+	root.traverse((object) => {
+		const mesh = object as THREE.Mesh;
+		if (!mesh.isMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) {
+			return;
+		}
+		const indices = new Map<string, number>();
+		for (const morphTarget of TALK_MORPH_TARGETS) {
+			const index = mesh.morphTargetDictionary[morphTarget];
+			if (index !== undefined) {
+				indices.set(morphTarget, index);
+			}
+		}
+		if (indices.size > 0) {
+			visemeMeshes.push({ mesh, indices });
+		}
+	});
+
+	return { visemeMeshes };
 }
 
 async function loadAnimationManifest() {
@@ -1348,6 +1446,7 @@ async function addModel(
 		mixer: new THREE.AnimationMixer(instance),
 		modelName: name,
 		root: instance,
+		talk: findNpcTalkRig(instance),
 		walk: null,
 	};
 	await setNpcIdleAnimation(npc, defaultNpcIdleAnimation(npc));
@@ -1643,6 +1742,241 @@ function getAudio(name: string) {
 	audio.preload = "auto";
 	audioCache.set(name, audio);
 	return audio.cloneNode(true) as HTMLAudioElement;
+}
+
+function talkfileUrl(name: string) {
+	if (name.startsWith("/")) {
+		return name;
+	}
+	if (name.includes("/")) {
+		return name.endsWith(".json") ? name : `${name}.json`;
+	}
+	return `${TALKFILE_ROOT}/${name.endsWith(".json") ? name : `${name}.json`}`;
+}
+
+function talkfileAudioUrl(talkfilePath: string, talkfile: Talkfile) {
+	if (talkfile.audio) {
+		if (talkfile.audio.startsWith("/")) {
+			return talkfile.audio;
+		}
+		return new URL(talkfile.audio, window.location.origin + talkfilePath).pathname;
+	}
+	return talkfilePath.replace(/\.json(?:$|\?)/, ".mp3");
+}
+
+function isTalkfileCue(value: unknown): value is TalkfileCue {
+	return (
+		isObject(value) &&
+		typeof value.start === "number" &&
+		Number.isFinite(value.start) &&
+		typeof value.end === "number" &&
+		Number.isFinite(value.end) &&
+			typeof value.shape === "string" &&
+			typeof value.morphTarget === "string" &&
+			(VISEME_MORPH_TARGETS as readonly string[]).includes(value.morphTarget) &&
+			(value.jawOpen === undefined ||
+				(typeof value.jawOpen === "number" && Number.isFinite(value.jawOpen))) &&
+			(value.volume === undefined || (typeof value.volume === "number" && Number.isFinite(value.volume)))
+	);
+}
+
+function validateTalkfile(value: unknown): Talkfile {
+	if (!isObject(value) || typeof value.caption !== "string" || typeof value.duration !== "number") {
+		throw new Error("Talkfile JSON must include caption and duration.");
+	}
+	const rawCues = Array.isArray(value.cues)
+		? value.cues
+		: Array.isArray(value.visemes)
+			? value.visemes
+			: null;
+	if (!rawCues) {
+		throw new Error("Talkfile JSON must include a cues array.");
+	}
+	const cues = rawCues.filter(isTalkfileCue).sort((a, b) => a.start - b.start);
+	if (cues.length !== rawCues.length) {
+		throw new Error("Talkfile has invalid cue entries.");
+	}
+	return {
+		audio: typeof value.audio === "string" ? value.audio : undefined,
+		caption: value.caption,
+		duration: Math.max(0, value.duration),
+		cues,
+		tweenSeconds:
+			typeof value.tweenSeconds === "number" && Number.isFinite(value.tweenSeconds)
+				? Math.max(0, value.tweenSeconds)
+				: undefined,
+	};
+}
+
+async function loadTalkfile(name: string) {
+	const url = talkfileUrl(name);
+	const cached = talkfileCache.get(url);
+	if (cached) {
+		return { talkfile: cached, url };
+	}
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`HTTP ${response.status}`);
+	}
+	const talkfile = validateTalkfile(await response.json());
+	talkfileCache.set(url, talkfile);
+	return { talkfile, url };
+}
+
+async function loadTalkAudio(url: string) {
+	const cached = talkAudioCache.get(url);
+	if (cached) {
+		return cached;
+	}
+	const loader = new THREE.AudioLoader();
+	const buffer = await loader.loadAsync(url);
+	talkAudioCache.set(url, buffer);
+	return buffer;
+}
+
+function resetNpcVisemes(npc: NpcInstance) {
+	for (const entry of npc.talk.visemeMeshes) {
+		const influences = entry.mesh.morphTargetInfluences;
+		if (!influences) {
+			continue;
+		}
+		for (const index of entry.indices.values()) {
+			influences[index] = 0;
+		}
+	}
+}
+
+function nearestNpcToPlayer() {
+	const feet = feetPosition();
+	let nearest: NpcInstance | null = null;
+	let nearestDistanceSq = Infinity;
+	for (const npc of npcs) {
+		if (!npc.root.visible) {
+			continue;
+		}
+		const distanceSq = npc.root.position.distanceToSquared(feet);
+		if (distanceSq < nearestDistanceSq) {
+			nearest = npc;
+			nearestDistanceSq = distanceSq;
+		}
+	}
+	return nearest;
+}
+
+async function playTalkfileOnNpc(npc: NpcInstance, name: string) {
+	const { talkfile, url } = await loadTalkfile(name);
+	if (npc.talk.visemeMeshes.length === 0) {
+		throw new Error(`NPC "${npc.id ?? npc.modelName}" has no RocketBox viseme morph targets.`);
+	}
+	const buffer = await loadTalkAudio(talkfileAudioUrl(url, talkfile));
+	const audio = new THREE.PositionalAudio(audioListener);
+	audio.setBuffer(buffer);
+	audio.setRefDistance(1);
+	audio.setRolloffFactor(0);
+	audio.setDistanceModel("linear");
+	audio.setLoop(false);
+	npc.root.add(audio);
+	resetNpcVisemes(npc);
+	setCaption(talkfile.caption);
+	audio.play();
+	activeTalks.push({
+		audio,
+		caption: talkfile.caption,
+		cues: talkfile.cues,
+		duration: talkfile.duration,
+		npc,
+		currentWeights: new Map(),
+		startedAt: audio.context.currentTime,
+		tweenSeconds: talkfile.tweenSeconds ?? TALKFILE_TWEEN_SECONDS,
+	});
+	setConsoleLog(`Playing talkfile "${name}" on ${npc.id ?? npc.modelName}.`);
+}
+
+function cueAt(cues: TalkfileCue[], time: number) {
+	for (let index = 0; index < cues.length; index += 1) {
+		const cue = cues[index];
+		if (time >= cue.start && time < cue.end) {
+			return { cue, index };
+		}
+	}
+	return null;
+}
+
+function addVisemeWeight(weights: Map<string, number>, morphTarget: string, weight: number) {
+	weights.set(morphTarget, Math.max(weights.get(morphTarget) ?? 0, THREE.MathUtils.clamp(weight, 0, 1)));
+}
+
+function addCueWeights(weights: Map<string, number>, cue: TalkfileCue, weight: number) {
+	addVisemeWeight(weights, cue.morphTarget, weight);
+	if (cue.jawOpen && cue.jawOpen > 0) {
+		addVisemeWeight(weights, TALK_JAW_OPEN_TARGET, cue.jawOpen * weight);
+	}
+}
+
+function visemeWeightsAt(cues: TalkfileCue[], time: number, tweenSeconds: number) {
+	const weights = new Map<string, number>();
+	const active = cueAt(cues, time);
+	if (!active) {
+		addVisemeWeight(weights, "AA_VI_00_Sil", 1);
+		return weights;
+	}
+
+	const cue = active.cue;
+	const previous = cues[active.index - 1];
+	const next = cues[active.index + 1];
+	let currentWeight = 1;
+
+	if (tweenSeconds > 0 && previous && time - cue.start < tweenSeconds) {
+		const progress = THREE.MathUtils.clamp((time - cue.start) / tweenSeconds, 0, 1);
+		addCueWeights(weights, previous, 1 - progress);
+		currentWeight = Math.min(currentWeight, progress);
+	}
+	if (tweenSeconds > 0 && next && cue.end - time < tweenSeconds) {
+		const progress = THREE.MathUtils.clamp((tweenSeconds - (cue.end - time)) / tweenSeconds, 0, 1);
+		addCueWeights(weights, next, progress);
+		currentWeight = Math.min(currentWeight, 1 - progress);
+	}
+
+	addCueWeights(weights, cue, currentWeight);
+	return weights;
+}
+
+function smoothTalkWeights(talk: ActiveTalk, targetWeights: Map<string, number>, deltaTime: number) {
+	for (const morphTarget of TALK_MORPH_TARGETS) {
+		const current = talk.currentWeights.get(morphTarget) ?? 0;
+		const target = targetWeights.get(morphTarget) ?? 0;
+		const next = THREE.MathUtils.damp(current, target, TALKFILE_SMOOTH_LAMBDA, deltaTime);
+		talk.currentWeights.set(morphTarget, next < 0.001 ? 0 : next);
+	}
+}
+
+function applyNpcVisemes(npc: NpcInstance, weights: Map<string, number>) {
+	for (const entry of npc.talk.visemeMeshes) {
+		const influences = entry.mesh.morphTargetInfluences;
+		if (!influences) {
+			continue;
+		}
+		for (const [morphTarget, index] of entry.indices) {
+			influences[index] = weights.get(morphTarget) ?? 0;
+		}
+	}
+}
+
+function updateActiveTalks(deltaTime: number) {
+	for (let index = activeTalks.length - 1; index >= 0; index -= 1) {
+		const talk = activeTalks[index];
+		const elapsed = talk.audio.context.currentTime - talk.startedAt;
+		if (!talk.audio.isPlaying || elapsed >= talk.duration + talk.tweenSeconds) {
+			talk.audio.stop();
+			talk.audio.removeFromParent();
+			resetNpcVisemes(talk.npc);
+			activeTalks.splice(index, 1);
+			setCaption(activeTalks.at(-1)?.caption ?? "");
+			continue;
+		}
+		smoothTalkWeights(talk, visemeWeightsAt(talk.cues, elapsed, talk.tweenSeconds), deltaTime);
+		applyNpcVisemes(talk.npc, talk.currentWeights);
+	}
 }
 
 function fadeAudio(audio: HTMLAudioElement, from: number, to: number, seconds: number, onDone?: () => void) {
@@ -2025,9 +2359,11 @@ async function runSequenceEvent(sequence: SequenceDefinition, event: SequenceEve
 			npc.root.userData.emotion = sequenceEventString(event, "emotion");
 			return;
 		}
-		case "npc-talk":
-			setConsoleLog("npc-talk needs talkfile format, subtitle timing, lipsync target, and audio path conventions.");
+		case "npc-talk": {
+			const npc = await ensureSequenceNpc(sequenceEventString(event, "npc"), sequence);
+			await playTalkfileOnNpc(npc, sequenceEventString(event, "talkfile"));
 			return;
+		}
 		default:
 			setConsoleLog(`Unsupported sequence event "${event.type}".`);
 	}
@@ -2304,6 +2640,23 @@ async function runConsoleCommand(rawCommand: string) {
 			}
 			return;
 		}
+		case "say-talkfile": {
+			if (args.length !== 1) {
+				setConsoleLog("Usage: say-talkfile [talkfile]");
+				return;
+			}
+			const npc = nearestNpcToPlayer();
+			if (!npc) {
+				setConsoleLog("No visible NPCs in scene. Add one with add-model [name].");
+				return;
+			}
+			try {
+				await playTalkfileOnNpc(npc, args[0]);
+			} catch (error) {
+				setConsoleLog(`Could not play talkfile "${args[0]}": ${String(error)}`);
+			}
+			return;
+		}
 		case "show-position": {
 			if (args.length !== 0) {
 				setConsoleLog("Usage: show-position");
@@ -2553,6 +2906,7 @@ function animate() {
 		for (const npc of npcs) {
 			npc.mixer.update(deltaTime);
 		}
+		updateActiveTalks(deltaTime);
 		updateNpcGazes(deltaTime);
 		updatePositionLine();
 	}
