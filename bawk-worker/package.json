@@ -3,6 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
+		"build:nav-grid": "node scripts/build-nav-grid.mjs",
 		"build:client": "esbuild client/src/game.ts --bundle --format=esm --sourcemap --outfile=public/game.js",
 		"deploy": "wrangler deploy",
 		"dev": "npm run build:client && wrangler dev",

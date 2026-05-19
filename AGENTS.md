@@ -18,6 +18,7 @@ mkdir -p bawk-worker/public/assets/models bawk-worker/public/assets/animations
 cp models/base-map.glb bawk-worker/public/assets/base-map.glb
 cp models/npc-*.glb bawk-worker/public/assets/models/
 cp animations/*.glb bawk-worker/public/assets/animations/
+npm --prefix bawk-worker run build:nav-grid
 node --input-type=module - <<'NODE'
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -40,6 +41,7 @@ This manifest format assumes each animation GLB is a single logical animation. I
 Run from `bawk-worker/`:
 
 ```sh
+npm run build:nav-grid
 npm run build:client
 npm run dev
 npm test -- --run

@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Octree } from "three/examples/jsm/math/Octree.js";
 import { Capsule } from "three/examples/jsm/math/Capsule.js";
@@ -29,13 +28,18 @@ const FLOOR_RAY_DISTANCE = 6;
 const TELEPORT_FLOOR = -20;
 const DEFAULT_AMBIENT_INTENSITY = 0.55;
 const DEFAULT_NPC_FILL_INTENSITY = 0.7;
-const SKYBOX_PATH = "/assets/skybox.webp";
+const NPC_NAV_GRID_PATH = "/assets/nav-grid.json";
 const RECT_LIGHT_PREFIX = "rect-light";
-const RECT_LIGHT_INTENSITY = 18;
-const RECT_LIGHT_MIN_SIZE = 0.01;
+const CEILING_LIGHTS_ENABLED = true;
+const CEILING_LIGHT_INTENSITY = 2.6;
+const CEILING_LIGHT_RANGE = 24;
+const CEILING_LIGHT_DECAY = 1.5;
+const CEILING_LIGHT_VISIBLE_DISTANCE = 4;
+const CEILING_LIGHT_VISIBLE_DISTANCE_SQ = CEILING_LIGHT_VISIBLE_DISTANCE ** 2;
 const CHAIR_PREFIX = "chair";
 const STATIC_CYLINDER_PREFIX = "smcyl-";
 const STATIC_BOX_PREFIX = "smbox-";
+const INSTANCED_NON_PBR_PREFIXES = ["smbox-van", "smbox-chicken", "GLASS"] as const;
 const CHAIR_COLLISION_RADIUS_SCALE = 0.28;
 const CHAIR_COLLISION_MAX_RADIUS = 0.38;
 const STATIC_CYLINDER_COLLISION_SCALE = 0.92;
@@ -59,6 +63,15 @@ const TALKFILE_TWEEN_SECONDS = 0.18;
 const TALKFILE_SMOOTH_LAMBDA = 14;
 const TALKFILE_ROOT = "/assets/talkfiles";
 const TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
+const INTERACT_DISTANCE = 4;
+const NEXTFLIX_DESKTOP_IMAGES = {
+	winded: "/assets/images/winded-no-sleck.webp",
+	selection: "/assets/images/nextflix-selection.webp",
+} as const;
+const NEXTFLIX_DESKTOP_SIZE = { width: 1280, height: 960 };
+const NEXTFLIX_HOTSPOT = { x: 73, y: 94, width: 260, height: 245 };
+const NEXTFLIX_VIDEO_GRID = { x: 24, y: 121, width: 1234, height: 821, columns: 5, rows: 4 };
+const NEXTFLIX_LATER_SECONDS = 4;
 const VISEME_MORPH_TARGETS = [
 	"AA_VI_00_Sil",
 	"AA_VI_01_PP",
@@ -83,6 +96,8 @@ const DEFAULT_STATUS_TEXT =
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const loading = document.querySelector<HTMLDivElement>("#loading");
 const prompt = document.querySelector<HTMLDivElement>("#prompt");
+const crosshair = document.querySelector<HTMLDivElement>("#crosshair");
+const missionLine = document.querySelector<HTMLDivElement>("#mission-line");
 const statusLine = document.querySelector<HTMLDivElement>("#status-line");
 const captionLine = document.querySelector<HTMLDivElement>("#caption-line");
 const positionLine = document.querySelector<HTMLDivElement>("#position-line");
@@ -95,11 +110,17 @@ const femaleAnimationList = document.querySelector<HTMLDivElement>("#female-anim
 const maleAnimationList = document.querySelector<HTMLDivElement>("#male-animation-list");
 const femaleAnimationSearch = document.querySelector<HTMLInputElement>("#female-animation-search");
 const maleAnimationSearch = document.querySelector<HTMLInputElement>("#male-animation-search");
+const imageOverlay = document.querySelector<HTMLDivElement>("#image-overlay");
+const imageOverlayImage = document.querySelector<HTMLImageElement>("#image-overlay-image");
+const imageOverlayVideo = document.querySelector<HTMLVideoElement>("#image-overlay-video");
+const laterCard = document.querySelector<HTMLDivElement>("#later-card");
 
 if (
 	!canvas ||
 	!loading ||
 	!prompt ||
+	!crosshair ||
+	!missionLine ||
 	!statusLine ||
 	!captionLine ||
 	!positionLine ||
@@ -111,16 +132,19 @@ if (
 	!femaleAnimationList ||
 	!maleAnimationList ||
 	!femaleAnimationSearch ||
-	!maleAnimationSearch
+	!maleAnimationSearch ||
+	!imageOverlay ||
+	!imageOverlayImage ||
+	!imageOverlayVideo ||
+	!laterCard
 ) {
 	throw new Error("Game shell is missing required DOM nodes.");
 }
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
 renderer.shadowMap.enabled = true;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-RectAreaLightUniformsLib.init();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x16191d);
@@ -140,6 +164,7 @@ const worldOctree = new Octree();
 const floorRaycaster = new THREE.Raycaster();
 const levelMeshes: THREE.Mesh[] = [];
 const navRaycaster = new THREE.Raycaster();
+const interactionRay = new THREE.Ray();
 const playerCollider = new Capsule(
 	new THREE.Vector3(7, 0.22 + PLAYER_RADIUS, -3),
 	new THREE.Vector3(7, 0.22 + STAND_HEIGHT - PLAYER_RADIUS, -3),
@@ -198,6 +223,7 @@ const consoleCommands = [
 const npcMaterials = new Set<THREE.Material>();
 const npcs: NpcInstance[] = [];
 const npcsById = new Map<string, NpcInstance>();
+const pendingSequenceNpcs = new Map<string, Promise<NpcInstance>>();
 const sequenceCache = new Map<string, SequenceDefinition>();
 const talkfileCache = new Map<string, Talkfile>();
 const activeSequences: ActiveSequence[] = [];
@@ -207,6 +233,7 @@ const talkAudioCache = new Map<string, AudioBuffer>();
 const chairs: ChairInstance[] = [];
 const staticCylinders: CylinderCollider[] = [];
 const staticBoxes: BoxCollider[] = [];
+const ceilingLights: THREE.PointLight[] = [];
 const actionStopTimers = new WeakMap<THREE.AnimationAction, number>();
 
 function isRectLightMarker(object: THREE.Object3D) {
@@ -312,7 +339,7 @@ function createStaticCollisionRoot(level: THREE.Object3D) {
 	return collisionRoot;
 }
 
-function createRectLightsForInstances(mesh: THREE.InstancedMesh) {
+function createCeilingLightsForInstances(mesh: THREE.InstancedMesh) {
 	if (!mesh.geometry.boundingBox) {
 		mesh.geometry.computeBoundingBox();
 	}
@@ -322,13 +349,11 @@ function createRectLightsForInstances(mesh: THREE.InstancedMesh) {
 		return [];
 	}
 
-	const lights: THREE.RectAreaLight[] = [];
+	const lights: THREE.PointLight[] = [];
 	const instanceLocalMatrix = new THREE.Matrix4();
 	const instanceWorldMatrix = new THREE.Matrix4();
 	const instanceBounds = new THREE.Box3();
 	const instanceCenter = new THREE.Vector3();
-	const instanceSize = new THREE.Vector3();
-	const downTarget = new THREE.Vector3();
 
 	for (let index = 0; index < mesh.count; index += 1) {
 		mesh.getMatrixAt(index, instanceLocalMatrix);
@@ -340,18 +365,15 @@ function createRectLightsForInstances(mesh: THREE.InstancedMesh) {
 		}
 
 		instanceBounds.getCenter(instanceCenter);
-		instanceBounds.getSize(instanceSize);
-
-		const light = new THREE.RectAreaLight(
+		const light = new THREE.PointLight(
 			0xffffff,
-			RECT_LIGHT_INTENSITY,
-			Math.max(instanceSize.x, RECT_LIGHT_MIN_SIZE),
-			Math.max(instanceSize.z, RECT_LIGHT_MIN_SIZE),
+			CEILING_LIGHT_INTENSITY,
+			CEILING_LIGHT_RANGE,
+			CEILING_LIGHT_DECAY,
 		);
-		light.name = `${mesh.name}-area-light-${index}`;
+		light.name = `${mesh.name}-point-light-${index}`;
 		light.position.copy(instanceCenter);
-		downTarget.set(instanceCenter.x, instanceCenter.y - 1, instanceCenter.z);
-		light.lookAt(downTarget);
+		light.visible = false;
 		lights.push(light);
 	}
 
@@ -376,6 +398,63 @@ function removeObjectFromParent(object: THREE.Object3D) {
 	parent.remove(object);
 }
 
+function shouldRemoveInstancedPbr(mesh: THREE.Mesh) {
+	return INSTANCED_NON_PBR_PREFIXES.some((prefix) => mesh.name.startsWith(prefix));
+}
+
+function isPbrMaterial(material: THREE.Material) {
+	return (material as THREE.MeshStandardMaterial).isMeshStandardMaterial === true ||
+		(material as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial === true;
+}
+
+function createNonPbrInstancedMaterial(material: THREE.Material) {
+	if (!isPbrMaterial(material)) {
+		return material;
+	}
+
+	const pbrMaterial = material as THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
+	const nonPbrMaterial = new THREE.MeshLambertMaterial({
+		alphaMap: pbrMaterial.alphaMap,
+		alphaTest: pbrMaterial.alphaTest,
+		aoMap: pbrMaterial.aoMap,
+		aoMapIntensity: pbrMaterial.aoMapIntensity,
+		blending: pbrMaterial.blending,
+		color: pbrMaterial.color.clone(),
+		depthTest: pbrMaterial.depthTest,
+		depthWrite: pbrMaterial.depthWrite,
+		emissive: pbrMaterial.emissive.clone(),
+		emissiveIntensity: pbrMaterial.emissiveIntensity,
+		emissiveMap: pbrMaterial.emissiveMap,
+		fog: pbrMaterial.fog,
+		lightMap: pbrMaterial.lightMap,
+		lightMapIntensity: pbrMaterial.lightMapIntensity,
+		map: pbrMaterial.map,
+		opacity: pbrMaterial.opacity,
+		side: pbrMaterial.side,
+		toneMapped: pbrMaterial.toneMapped,
+		transparent: pbrMaterial.transparent,
+		vertexColors: pbrMaterial.vertexColors,
+		wireframe: pbrMaterial.wireframe,
+	});
+	nonPbrMaterial.name = material.name;
+	nonPbrMaterial.visible = material.visible;
+	nonPbrMaterial.userData = { ...material.userData };
+	return nonPbrMaterial;
+}
+
+function createInstancedMaterial(
+	material: THREE.Material | THREE.Material[],
+	removePbr: boolean,
+) {
+	if (!removePbr) {
+		return material;
+	}
+	if (Array.isArray(material)) {
+		return material.map((entry) => createNonPbrInstancedMaterial(entry));
+	}
+	return createNonPbrInstancedMaterial(material);
+}
+
 function createStaticInstancedMeshes(
 	meshes: THREE.Mesh[],
 	namePrefix: string,
@@ -383,20 +462,27 @@ function createStaticInstancedMeshes(
 	const batches: {
 		geometry: THREE.BufferGeometry;
 		material: THREE.Material | THREE.Material[];
+		removePbr: boolean;
 		meshes: THREE.Mesh[];
 	}[] = [];
 
 	for (const mesh of meshes) {
-		const batch = batches.find((candidate) => candidate.geometry === mesh.geometry && candidate.material === mesh.material);
+		const removePbr = shouldRemoveInstancedPbr(mesh);
+		const batch = batches.find((candidate) =>
+			candidate.geometry === mesh.geometry &&
+			candidate.material === mesh.material &&
+			candidate.removePbr === removePbr
+		);
 		if (batch) {
 			batch.meshes.push(mesh);
 		} else {
-			batches.push({ geometry: mesh.geometry, material: mesh.material, meshes: [mesh] });
+			batches.push({ geometry: mesh.geometry, material: mesh.material, removePbr, meshes: [mesh] });
 		}
 	}
 
 	return batches.map((batch, batchIndex) => {
-		const instancedMesh = new THREE.InstancedMesh(batch.geometry, batch.material, batch.meshes.length);
+		const material = createInstancedMaterial(batch.material, batch.removePbr);
+		const instancedMesh = new THREE.InstancedMesh(batch.geometry, material, batch.meshes.length);
 		instancedMesh.name = `${namePrefix}-static-instances-${batchIndex}`;
 		instancedMesh.castShadow = true;
 		instancedMesh.receiveShadow = true;
@@ -483,30 +569,53 @@ function createStaticBoxColliders(mesh: THREE.Mesh) {
 	return [{ center, halfSize }];
 }
 
-async function loadSkybox() {
-	const texture = await new THREE.TextureLoader().loadAsync(SKYBOX_PATH);
-	texture.colorSpace = THREE.SRGBColorSpace;
-	texture.mapping = THREE.EquirectangularReflectionMapping;
-	scene.background = texture;
+function staticInteractionKey(name: string) {
+	return name.replace(/\.\d+$/, "");
+}
+
+function registerStaticBoxInteractionTarget(mesh: THREE.Mesh) {
+	const bounds = meshWorldBounds(mesh);
+	if (!bounds || !mesh.name.startsWith(STATIC_BOX_PREFIX)) {
+		return;
+	}
+	const helper = new THREE.Box3Helper(bounds, 0xffd24a);
+	helper.name = `${mesh.name}-interaction-outline`;
+	helper.visible = false;
+	helper.material.depthTest = false;
+	helper.renderOrder = 1000;
+	const target = { name: mesh.name, bounds, helper };
+	staticBoxInteractionTargets.set(mesh.name, target);
+	if (!staticBoxInteractionTargets.has(staticInteractionKey(mesh.name))) {
+		staticBoxInteractionTargets.set(staticInteractionKey(mesh.name), target);
+	}
+	scene.add(helper);
+}
+
+function isFloorPlacementSurface(object: THREE.Object3D) {
+	const name = object.name.toLowerCase();
+	return name.includes("floor") || name.includes("threshold");
 }
 
 function floorHitAt(x: number, z: number, startY: number, objects: THREE.Object3D[]) {
 	navRaycaster.set(new THREE.Vector3(x, startY, z), new THREE.Vector3(0, -1, 0));
 	navRaycaster.far = FLOOR_RAY_DISTANCE * 3;
-	let lowestHit: THREE.Intersection | null = null;
+	let highestHit: THREE.Intersection | null = null;
 
 	for (const hit of navRaycaster.intersectObjects(objects, false)) {
+		if (!isFloorPlacementSurface(hit.object)) {
+			continue;
+		}
 		const normal = hit.face?.normal.clone();
 		if (!normal) {
 			continue;
 		}
 		normal.transformDirection(hit.object.matrixWorld);
-		if (normal.y > 0.55 && (!lowestHit || hit.point.y < lowestHit.point.y)) {
-			lowestHit = hit;
+		if (normal.y > 0.55 && (!highestHit || hit.point.y > highestHit.point.y)) {
+			highestHit = hit;
 		}
 	}
 
-	return lowestHit;
+	return highestHit;
 }
 
 function hasWallBetween(from: THREE.Vector3, to: THREE.Vector3) {
@@ -561,6 +670,107 @@ function createNpcNavGrid() {
 	}
 
 	return { minX, minZ, width, depth, cellSize, cells };
+}
+
+function isNpcNavGrid(value: unknown): value is NpcNavGrid {
+	if (!isObject(value)) {
+		return false;
+	}
+	const grid = value as Partial<NpcNavGrid>;
+	return typeof grid.minX === "number" &&
+		typeof grid.minZ === "number" &&
+		typeof grid.width === "number" &&
+		typeof grid.depth === "number" &&
+		typeof grid.cellSize === "number" &&
+		Number.isInteger(grid.width) &&
+		Number.isInteger(grid.depth) &&
+		grid.width > 0 &&
+		grid.depth > 0 &&
+		Array.isArray(grid.cells) &&
+		grid.cells.length === grid.width * grid.depth &&
+		grid.cells.every((cell) =>
+			isObject(cell) &&
+			typeof cell.walkable === "boolean" &&
+			typeof cell.y === "number"
+		);
+}
+
+function isCompactNpcNavGrid(value: unknown) {
+	if (!isObject(value)) {
+		return false;
+	}
+	const grid = value as {
+		version?: unknown;
+		minX?: unknown;
+		minZ?: unknown;
+		width?: unknown;
+		depth?: unknown;
+		cellSize?: unknown;
+		walkable?: unknown;
+		y?: unknown;
+	};
+	const cellCount = typeof grid.width === "number" && typeof grid.depth === "number"
+		? grid.width * grid.depth
+		: -1;
+	return grid.version === 1 &&
+		typeof grid.minX === "number" &&
+		typeof grid.minZ === "number" &&
+		typeof grid.width === "number" &&
+		typeof grid.depth === "number" &&
+		typeof grid.cellSize === "number" &&
+		Number.isInteger(grid.width) &&
+		Number.isInteger(grid.depth) &&
+		grid.width > 0 &&
+		grid.depth > 0 &&
+		typeof grid.walkable === "string" &&
+		grid.walkable.length === cellCount &&
+		Array.isArray(grid.y) &&
+		grid.y.length === cellCount &&
+		grid.y.every((height) => typeof height === "number");
+}
+
+function hydrateCompactNpcNavGrid(value: unknown): NpcNavGrid | null {
+	if (!isCompactNpcNavGrid(value)) {
+		return null;
+	}
+	const grid = value as {
+		minX: number;
+		minZ: number;
+		width: number;
+		depth: number;
+		cellSize: number;
+		walkable: string;
+		y: number[];
+	};
+	return {
+		minX: grid.minX,
+		minZ: grid.minZ,
+		width: grid.width,
+		depth: grid.depth,
+		cellSize: grid.cellSize,
+		cells: grid.y.map((height, index) => ({
+			walkable: grid.walkable[index] === "1",
+			y: height,
+		})),
+	};
+}
+
+async function loadBakedNpcNavGrid() {
+	try {
+		const response = await fetch(NPC_NAV_GRID_PATH);
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}`);
+		}
+		const json = await response.json();
+		const grid = hydrateCompactNpcNavGrid(json) ?? (isNpcNavGrid(json) ? json : null);
+		if (!grid) {
+			throw new Error("nav grid JSON has an invalid shape");
+		}
+		return grid;
+	} catch (error) {
+		console.warn("Could not load baked NPC nav grid; generating at startup.", error);
+		return null;
+	}
 }
 
 function navCellIndex(grid: NpcNavGrid, x: number, z: number) {
@@ -951,6 +1161,18 @@ type SequenceDefinition = {
 	events: SequenceEvent[];
 };
 
+type StageDefinition = {
+	name: string;
+	mission: string;
+	sequence?: string;
+	interactables: StageInteractableDefinition[];
+};
+
+type StageInteractableDefinition = {
+	object: string;
+	action: "open-nextflix-desktop" | "get-soda";
+};
+
 type ActiveSequence = {
 	name: string;
 	definition: SequenceDefinition;
@@ -988,6 +1210,17 @@ type CylinderCollider = {
 type BoxCollider = {
 	center: THREE.Vector3;
 	halfSize: THREE.Vector3;
+};
+
+type StaticBoxInteractionTarget = {
+	name: string;
+	bounds: THREE.Box3;
+	helper: THREE.Box3Helper;
+};
+
+type ActiveInteractable = {
+	action: StageInteractableDefinition["action"];
+	target: StaticBoxInteractionTarget;
 };
 
 type NpcWalk = {
@@ -1076,9 +1309,34 @@ let playerMovementLocked = false;
 let playerViewLocked = false;
 let currentMusic: HTMLAudioElement | null = null;
 let positionVisible = false;
+let activeStage: StageDefinition | null = null;
+let activeInteractables: ActiveInteractable[] = [];
+let focusedInteractable: ActiveInteractable | null = null;
+let simulationPaused = false;
+let nextflixDesktopState: "closed" | "winded" | "selection" | "video" | "later" = "closed";
+let laterCardTimer = 0;
+let laterFadeTimer = 0;
+const staticBoxInteractionTargets = new Map<string, StaticBoxInteractionTarget>();
+const stages: StageDefinition[] = [
+	{
+		name: "watch-nextflix",
+		mission: "Watch Nextflix on the computer.",
+		interactables: [{ object: "smbox-fun-desk", action: "open-nextflix-desktop" }],
+	},
+	{
+		name: "get-soda",
+		mission: "Get a soda...",
+		interactables: [{ object: "smbox-soda-vending", action: "get-soda" }],
+	},
+];
 
 function setStatus(text: string) {
 	statusLine.textContent = text;
+}
+
+function setMission(text: string) {
+	missionLine.textContent = text;
+	missionLine.hidden = text.trim() === "";
 }
 
 function updatePositionLine() {
@@ -1152,12 +1410,212 @@ function setAnimationBrowserOpen(open: boolean) {
 	}
 }
 
+function setControlsSuspended(suspended: boolean) {
+	if (suspended) {
+		if (document.pointerLockElement === canvas) {
+			document.exitPointerLock();
+		}
+		keyStates.clear();
+		playerVelocity.set(0, 0, 0);
+	}
+}
+
+function setInteractionOutlines() {
+	for (const target of staticBoxInteractionTargets.values()) {
+		target.helper.visible = false;
+	}
+	for (const interactable of activeInteractables) {
+		interactable.target.helper.visible = true;
+	}
+}
+
+function startStage(stage: StageDefinition) {
+	activeStage = stage;
+	setMission(stage.mission);
+	activeInteractables = stage.interactables.flatMap((definition) => {
+		const target = staticBoxInteractionTargets.get(definition.object);
+		return target ? [{ action: definition.action, target }] : [];
+	});
+	setInteractionOutlines();
+	if (stage.sequence) {
+		void playSequence(stage.sequence).catch((error) => {
+			setConsoleLog(`Could not play stage sequence "${stage.sequence}": ${String(error)}`);
+		});
+	}
+}
+
+function setFocusedInteractable(interactable: ActiveInteractable | null) {
+	focusedInteractable = interactable;
+	crosshair.classList.toggle("interactive", !!interactable);
+	canvas.style.cursor = interactable && document.pointerLockElement !== canvas ? "pointer" : "";
+}
+
+function findFocusedInteractable() {
+	if (!levelReady || simulationPaused || activeInteractables.length === 0) {
+		return null;
+	}
+	camera.getWorldDirection(playerDirection);
+	interactionRay.origin.copy(camera.position);
+	interactionRay.direction.copy(playerDirection).normalize();
+
+	let closest: ActiveInteractable | null = null;
+	let closestDistance = Infinity;
+	const hit = new THREE.Vector3();
+	for (const interactable of activeInteractables) {
+		const point = interactionRay.intersectBox(interactable.target.bounds, hit);
+		if (!point) {
+			continue;
+		}
+		const distance = point.distanceTo(camera.position);
+		if (distance <= INTERACT_DISTANCE && distance < closestDistance) {
+			closest = interactable;
+			closestDistance = distance;
+		}
+	}
+	return closest;
+}
+
+function updateInteractionFocus() {
+	setFocusedInteractable(findFocusedInteractable());
+}
+
+function resetNextflixOverlayMedia() {
+	window.clearTimeout(laterCardTimer);
+	window.clearTimeout(laterFadeTimer);
+	laterCardTimer = 0;
+	laterFadeTimer = 0;
+	imageOverlay.classList.remove("later", "fading");
+	imageOverlayImage.hidden = false;
+	imageOverlayImage.removeAttribute("src");
+	imageOverlayVideo.pause();
+	imageOverlayVideo.removeAttribute("src");
+	imageOverlayVideo.load();
+	imageOverlayVideo.hidden = true;
+	laterCard.hidden = true;
+	imageOverlay.style.cursor = "";
+}
+
+function closeNextflixDesktop() {
+	nextflixDesktopState = "closed";
+	imageOverlay.hidden = true;
+	resetNextflixOverlayMedia();
+	simulationPaused = false;
+	setControlsSuspended(false);
+	prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+	updateInteractionFocus();
+}
+
+function imageOverlayCoordinates(event: MouseEvent) {
+	const rect = imageOverlayImage.getBoundingClientRect();
+	if (rect.width <= 0 || rect.height <= 0) {
+		return null;
+	}
+	return {
+		x: ((event.clientX - rect.left) / rect.width) * NEXTFLIX_DESKTOP_SIZE.width,
+		y: ((event.clientY - rect.top) / rect.height) * NEXTFLIX_DESKTOP_SIZE.height,
+	};
+}
+
+function isNextflixHotspot(point: { x: number; y: number } | null) {
+	return !!point &&
+		point.x >= NEXTFLIX_HOTSPOT.x &&
+		point.x <= NEXTFLIX_HOTSPOT.x + NEXTFLIX_HOTSPOT.width &&
+		point.y >= NEXTFLIX_HOTSPOT.y &&
+		point.y <= NEXTFLIX_HOTSPOT.y + NEXTFLIX_HOTSPOT.height;
+}
+
+function nextflixVideoIndexAt(point: { x: number; y: number } | null) {
+	if (
+		!point ||
+		point.x < NEXTFLIX_VIDEO_GRID.x ||
+		point.x > NEXTFLIX_VIDEO_GRID.x + NEXTFLIX_VIDEO_GRID.width ||
+		point.y < NEXTFLIX_VIDEO_GRID.y ||
+		point.y > NEXTFLIX_VIDEO_GRID.y + NEXTFLIX_VIDEO_GRID.height
+	) {
+		return null;
+	}
+	const column = Math.min(
+		NEXTFLIX_VIDEO_GRID.columns - 1,
+		Math.floor(((point.x - NEXTFLIX_VIDEO_GRID.x) / NEXTFLIX_VIDEO_GRID.width) * NEXTFLIX_VIDEO_GRID.columns),
+	);
+	const row = Math.min(
+		NEXTFLIX_VIDEO_GRID.rows - 1,
+		Math.floor(((point.y - NEXTFLIX_VIDEO_GRID.y) / NEXTFLIX_VIDEO_GRID.height) * NEXTFLIX_VIDEO_GRID.rows),
+	);
+	return row * NEXTFLIX_VIDEO_GRID.columns + column + 1;
+}
+
+function formatVideoNumber(index: number) {
+	return String(index).padStart(2, "0");
+}
+
+function supportsAv1Video() {
+	const result = imageOverlayVideo.canPlayType('video/mp4; codecs="av01.0.05M.08"');
+	return result === "probably" || result === "maybe";
+}
+
+function nextflixVideoUrl(index: number) {
+	const number = formatVideoNumber(index);
+	return supportsAv1Video()
+		? `/assets/videos/av1/vid-${number}-av1.mp4`
+		: `/assets/videos/vid-${number}.mp4`;
+}
+
+function finishNextflixVideo() {
+	nextflixDesktopState = "later";
+	imageOverlay.classList.add("later");
+	imageOverlay.classList.remove("fading");
+	imageOverlayImage.hidden = true;
+	imageOverlayVideo.hidden = true;
+	laterCard.hidden = false;
+	laterCardTimer = window.setTimeout(() => {
+		imageOverlay.classList.add("fading");
+		laterFadeTimer = window.setTimeout(() => {
+			closeNextflixDesktop();
+			startStage(stages[1]);
+		}, 1000);
+	}, NEXTFLIX_LATER_SECONDS * 1000);
+}
+
+function playNextflixVideo(index: number) {
+	nextflixDesktopState = "video";
+	imageOverlay.style.cursor = "";
+	imageOverlayImage.hidden = true;
+	imageOverlayVideo.hidden = false;
+	imageOverlayVideo.controls = false;
+	imageOverlayVideo.src = nextflixVideoUrl(index);
+	imageOverlayVideo.currentTime = 0;
+	void imageOverlayVideo.play().catch((error) => {
+		setConsoleLog(`Could not play Nextflix video ${index}: ${String(error)}`);
+	});
+}
+
+function openNextflixDesktop() {
+	resetNextflixOverlayMedia();
+	nextflixDesktopState = "winded";
+	imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.winded;
+	imageOverlay.hidden = false;
+	prompt.hidden = true;
+	simulationPaused = true;
+	setControlsSuspended(true);
+}
+
 function interact() {
-	if (!levelReady) {
+	if (!levelReady || simulationPaused) {
 		return;
 	}
 
-	setStatus("Interact input received. No interactable objects are registered yet.");
+	const interactable = focusedInteractable ?? findFocusedInteractable();
+	if (interactable?.action === "open-nextflix-desktop") {
+		openNextflixDesktop();
+		return;
+	}
+	if (interactable?.action === "get-soda") {
+		setStatus("Soda machine selected.");
+		return;
+	}
+
+	setStatus("Nothing to interact with.");
 	window.setTimeout(() => {
 		if (levelReady) {
 			setStatus(DEFAULT_STATUS_TEXT);
@@ -2173,19 +2631,29 @@ async function ensureSequenceNpc(id: string, sequence: SequenceDefinition) {
 	if (existing) {
 		return existing;
 	}
+	const pending = pendingSequenceNpcs.get(id);
+	if (pending) {
+		return pending;
+	}
 	const definition = sequence.npcs?.[id];
 	if (!definition) {
 		throw new Error(`Sequence NPC "${id}" is not defined.`);
 	}
-	const spawn = definition.point ? resolvePoint(definition.point, sequence) : undefined;
-	const npc = await addModel(definition.model, spawn, { id, hidden: definition.hidden });
-	if (!npc) {
-		throw new Error(`Could not create NPC "${id}" with model "${definition.model}".`);
-	}
-	if (definition.idle) {
-		await setNpcIdleAnimation(npc, definition.idle);
-	}
-	return npc;
+	const load = (async () => {
+		const spawn = definition.point ? resolvePoint(definition.point, sequence) : undefined;
+		const npc = await addModel(definition.model, spawn, { id, hidden: definition.hidden });
+		if (!npc) {
+			throw new Error(`Could not create NPC "${id}" with model "${definition.model}".`);
+		}
+		if (definition.idle) {
+			await setNpcIdleAnimation(npc, definition.idle);
+		}
+		return npc;
+	})().finally(() => {
+		pendingSequenceNpcs.delete(id);
+	});
+	pendingSequenceNpcs.set(id, load);
+	return load;
 }
 
 function validateSequence(value: unknown, fallbackName: string): SequenceDefinition {
@@ -2717,19 +3185,22 @@ function floorYAt(x: number, z: number, fallbackY: number) {
 	floorRaycaster.far = FLOOR_RAY_DISTANCE;
 
 	const hits = floorRaycaster.intersectObjects(levelMeshes, false);
-	let lowestY: number | null = null;
+	let highestY: number | null = null;
 	for (const hit of hits) {
+		if (!isFloorPlacementSurface(hit.object)) {
+			continue;
+		}
 		const normal = hit.face?.normal.clone();
 		if (!normal) {
 			continue;
 		}
 		normal.transformDirection(hit.object.matrixWorld);
-		if (normal.y > 0.55 && (lowestY === null || hit.point.y < lowestY)) {
-			lowestY = hit.point.y;
+		if (normal.y > 0.55 && (highestY === null || hit.point.y > highestY)) {
+			highestY = hit.point.y;
 		}
 	}
 
-	return lowestY ?? fallbackY;
+	return highestY ?? fallbackY;
 }
 
 function feetPosition() {
@@ -2890,25 +3361,42 @@ function updatePlayer(deltaTime: number) {
 	}
 }
 
+function updateCeilingLights() {
+	if (!CEILING_LIGHTS_ENABLED) {
+		return;
+	}
+	for (const light of ceilingLights) {
+		light.visible = light.position.distanceToSquared(camera.position) <= CEILING_LIGHT_VISIBLE_DISTANCE_SQ;
+	}
+}
+
 function animate() {
-	const deltaTime = Math.min(0.05, clock.getDelta());
+	const rawDeltaTime = clock.getDelta();
+	if (simulationPaused) {
+		clock.elapsedTime -= rawDeltaTime;
+	}
+	const deltaTime = simulationPaused ? 0 : Math.min(0.05, rawDeltaTime);
 	const stepTime = deltaTime / PHYSICS_STEPS;
 
 	if (levelReady) {
-		for (let i = 0; i < PHYSICS_STEPS; i += 1) {
-			if (!consoleOpen && document.pointerLockElement === canvas) {
-				controls(stepTime);
+		if (!simulationPaused) {
+			for (let i = 0; i < PHYSICS_STEPS; i += 1) {
+				if (!consoleOpen && document.pointerLockElement === canvas) {
+					controls(stepTime);
+				}
+				updatePlayer(stepTime);
 			}
-			updatePlayer(stepTime);
+			updateSequences();
+			updateNpcWalks(deltaTime);
+			for (const npc of npcs) {
+				npc.mixer.update(deltaTime);
+			}
+			updateActiveTalks(deltaTime);
+			updateNpcGazes(deltaTime);
+			updateCeilingLights();
+			updatePositionLine();
+			updateInteractionFocus();
 		}
-		updateSequences();
-		updateNpcWalks(deltaTime);
-		for (const npc of npcs) {
-			npc.mixer.update(deltaTime);
-		}
-		updateActiveTalks(deltaTime);
-		updateNpcGazes(deltaTime);
-		updatePositionLine();
 	}
 
 	renderer.render(scene, camera);
@@ -2919,6 +3407,10 @@ function setupEvents() {
 	window.addEventListener("resize", resizeRenderer);
 
 	document.addEventListener("keydown", (event) => {
+		if (simulationPaused) {
+			event.preventDefault();
+			return;
+		}
 		if (event.code === "Backquote") {
 			event.preventDefault();
 			setConsoleOpen(!consoleOpen);
@@ -2963,7 +3455,7 @@ function setupEvents() {
 	});
 
 	canvas.addEventListener("click", () => {
-		if (!levelReady || consoleOpen) {
+		if (!levelReady || consoleOpen || simulationPaused) {
 			return;
 		}
 		if (document.pointerLockElement === canvas) {
@@ -2974,8 +3466,40 @@ function setupEvents() {
 	});
 
 	document.addEventListener("pointerlockchange", () => {
-		prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+		prompt.hidden = simulationPaused || consoleOpen || document.pointerLockElement === canvas;
+		updateInteractionFocus();
 	});
+
+	imageOverlay.addEventListener("mousemove", (event) => {
+		const point = imageOverlayCoordinates(event);
+		const clickable =
+			(nextflixDesktopState === "winded" && isNextflixHotspot(point)) ||
+			(nextflixDesktopState === "selection" && nextflixVideoIndexAt(point) !== null);
+		imageOverlay.style.cursor = clickable ? "pointer" : "";
+	});
+
+	imageOverlay.addEventListener("click", (event) => {
+		if (nextflixDesktopState === "video" || nextflixDesktopState === "later") {
+			return;
+		}
+		const point = imageOverlayCoordinates(event);
+		if (nextflixDesktopState === "winded") {
+			if (isNextflixHotspot(point)) {
+				nextflixDesktopState = "selection";
+				imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.selection;
+				imageOverlay.style.cursor = "";
+			}
+			return;
+		}
+		if (nextflixDesktopState === "selection") {
+			const index = nextflixVideoIndexAt(point);
+			if (index !== null) {
+				playNextflixVideo(index);
+			}
+		}
+	});
+
+	imageOverlayVideo.addEventListener("ended", finishNextflixVideo);
 
 	consoleInput.addEventListener("keydown", (event) => {
 		if (event.code === "Tab") {
@@ -3005,9 +3529,7 @@ async function loadLevel() {
 	await loadAnimationManifest();
 	await preloadCoreAnimations();
 	renderAnimationBrowser();
-	await loadSkybox().catch((error) => {
-		console.warn("Could not load skybox.", error);
-	});
+	const bakedNpcNavGridPromise = loadBakedNpcNavGrid();
 
 	const { loader, dracoLoader } = createGltfLoader();
 	const gltf = await loader.loadAsync("/assets/base-map.glb");
@@ -3021,7 +3543,6 @@ async function loadLevel() {
 	const instancedChairMeshes = createStaticInstancedMeshes(chairMeshes, CHAIR_PREFIX);
 	const instancedCylinderMeshes = createStaticInstancedMeshes(cylinderMeshes, STATIC_CYLINDER_PREFIX);
 	const instancedBoxMeshes = createStaticInstancedMeshes(boxMeshes, STATIC_BOX_PREFIX);
-	const rectLights: THREE.RectAreaLight[] = [];
 
 	for (const chairMesh of chairMeshes) {
 		chairs.push(...createChairColliders(chairMesh));
@@ -3033,6 +3554,7 @@ async function loadLevel() {
 	}
 	for (const boxMesh of boxMeshes) {
 		staticBoxes.push(...createStaticBoxColliders(boxMesh));
+		registerStaticBoxInteractionTarget(boxMesh);
 		removeObjectFromParent(boxMesh);
 	}
 
@@ -3057,13 +3579,14 @@ async function loadLevel() {
 		}
 	});
 
-	for (const marker of rectLightMarkers) {
-		rectLights.push(...createRectLightsForInstances(marker));
+	if (CEILING_LIGHTS_ENABLED) {
+		ceilingLights.push(...rectLightMarkers.flatMap((marker) => createCeilingLightsForInstances(marker)));
+		updateCeilingLights();
 	}
-	npcNavGrid = createNpcNavGrid();
+	npcNavGrid = await bakedNpcNavGridPromise ?? createNpcNavGrid();
 
 	scene.add(level);
-	for (const light of rectLights) {
+	for (const light of ceilingLights) {
 		scene.add(light);
 	}
 	for (const chairMesh of instancedChairMeshes) {
@@ -3083,6 +3606,7 @@ async function loadLevel() {
 	setStatus(
 		DEFAULT_STATUS_TEXT,
 	);
+	startStage(stages[0]);
 }
 
 resizeRenderer();
