@@ -5,6 +5,8 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { Octree } from "three/examples/jsm/math/Octree.js";
 import { Capsule } from "three/examples/jsm/math/Capsule.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { SleckUi } from "./sleck-ui";
+import { SogoUi } from "./sogo-ui";
 
 const GRAVITY = 30;
 const PLAYER_RADIUS = 0.35;
@@ -66,10 +68,12 @@ const TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
 const INTERACT_DISTANCE = 4;
 const NEXTFLIX_DESKTOP_IMAGES = {
 	winded: "/assets/images/winded-no-sleck.webp",
+	windedWithSleck: "/assets/images/winded.webp",
 	selection: "/assets/images/nextflix-selection.webp",
 } as const;
 const NEXTFLIX_DESKTOP_SIZE = { width: 1280, height: 960 };
 const NEXTFLIX_HOTSPOT = { x: 73, y: 94, width: 260, height: 245 };
+const SLECK_HOTSPOT = { x: 72, y: 420, width: 250, height: 260 };
 const NEXTFLIX_VIDEO_GRID = { x: 24, y: 121, width: 1234, height: 821, columns: 5, rows: 4 };
 const NEXTFLIX_LATER_SECONDS = 4;
 const VISEME_MORPH_TARGETS = [
@@ -573,9 +577,13 @@ function staticInteractionKey(name: string) {
 	return name.replace(/\.\d+$/, "");
 }
 
-function registerStaticBoxInteractionTarget(mesh: THREE.Mesh) {
+function isStaticInteractionMarker(mesh: THREE.Mesh) {
+	return mesh.name.startsWith(STATIC_BOX_PREFIX) || staticInteractionKey(mesh.name) === "smcyl-sogo";
+}
+
+function registerStaticInteractionTarget(mesh: THREE.Mesh) {
 	const bounds = meshWorldBounds(mesh);
-	if (!bounds || !mesh.name.startsWith(STATIC_BOX_PREFIX)) {
+	if (!bounds || !isStaticInteractionMarker(mesh)) {
 		return;
 	}
 	const helper = new THREE.Box3Helper(bounds, 0xffd24a);
@@ -1170,7 +1178,7 @@ type StageDefinition = {
 
 type StageInteractableDefinition = {
 	object: string;
-	action: "open-nextflix-desktop" | "get-soda";
+	action: "open-nextflix-desktop" | "open-sleck-desktop" | "open-sogo-update" | "get-soda";
 };
 
 type ActiveSequence = {
@@ -1313,11 +1321,27 @@ let activeStage: StageDefinition | null = null;
 let activeInteractables: ActiveInteractable[] = [];
 let focusedInteractable: ActiveInteractable | null = null;
 let simulationPaused = false;
-let nextflixDesktopState: "closed" | "winded" | "selection" | "video" | "later" = "closed";
+let nextflixDesktopState: "closed" | "winded" | "winded-with-sleck" | "selection" | "video" | "later" | "sleck" = "closed";
+let nextflixVideoReturn: "later" | "winded-with-sleck" = "later";
+let sleckUi: SleckUi | null = null;
+let sogoUi: SogoUi | null = null;
 let laterCardTimer = 0;
 let laterFadeTimer = 0;
 const staticBoxInteractionTargets = new Map<string, StaticBoxInteractionTarget>();
 const stages: StageDefinition[] = [
+	{
+		name: "approve-sogo-update",
+		mission: "Approve SOGO Update.",
+		interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }],
+	},
+	{
+		name: "read-sleck-message",
+		mission: "Read Message.",
+		interactables: [
+			{ object: "smbox-fun-desktop", action: "open-sleck-desktop" },
+			{ object: "smbox-fun-desk", action: "open-sleck-desktop" },
+		],
+	},
 	{
 		name: "watch-nextflix",
 		mission: "Watch Nextflix on the computer.",
@@ -1429,6 +1453,15 @@ function setInteractionOutlines() {
 	}
 }
 
+function completeStageInteraction(interactable: ActiveInteractable) {
+	interactable.target.helper.visible = false;
+	activeInteractables = activeInteractables.filter((candidate) => candidate !== interactable);
+	setFocusedInteractable(null);
+	if (activeInteractables.length === 0) {
+		setMission("");
+	}
+}
+
 function startStage(stage: StageDefinition) {
 	activeStage = stage;
 	setMission(stage.mission);
@@ -1484,6 +1517,7 @@ function resetNextflixOverlayMedia() {
 	window.clearTimeout(laterFadeTimer);
 	laterCardTimer = 0;
 	laterFadeTimer = 0;
+	nextflixVideoReturn = "later";
 	imageOverlay.classList.remove("later", "fading");
 	imageOverlayImage.hidden = false;
 	imageOverlayImage.removeAttribute("src");
@@ -1492,6 +1526,8 @@ function resetNextflixOverlayMedia() {
 	imageOverlayVideo.load();
 	imageOverlayVideo.hidden = true;
 	laterCard.hidden = true;
+	sleckUi?.close();
+	sogoUi?.close();
 	imageOverlay.style.cursor = "";
 }
 
@@ -1522,6 +1558,14 @@ function isNextflixHotspot(point: { x: number; y: number } | null) {
 		point.x <= NEXTFLIX_HOTSPOT.x + NEXTFLIX_HOTSPOT.width &&
 		point.y >= NEXTFLIX_HOTSPOT.y &&
 		point.y <= NEXTFLIX_HOTSPOT.y + NEXTFLIX_HOTSPOT.height;
+}
+
+function isSleckHotspot(point: { x: number; y: number } | null) {
+	return !!point &&
+		point.x >= SLECK_HOTSPOT.x &&
+		point.x <= SLECK_HOTSPOT.x + SLECK_HOTSPOT.width &&
+		point.y >= SLECK_HOTSPOT.y &&
+		point.y <= SLECK_HOTSPOT.y + SLECK_HOTSPOT.height;
 }
 
 function nextflixVideoIndexAt(point: { x: number; y: number } | null) {
@@ -1562,6 +1606,18 @@ function nextflixVideoUrl(index: number) {
 }
 
 function finishNextflixVideo() {
+	if (nextflixVideoReturn === "winded-with-sleck") {
+		nextflixDesktopState = "winded-with-sleck";
+		imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.windedWithSleck;
+		imageOverlayImage.hidden = false;
+		imageOverlayVideo.hidden = true;
+		imageOverlayVideo.pause();
+		imageOverlayVideo.removeAttribute("src");
+		imageOverlayVideo.load();
+		imageOverlay.style.cursor = "";
+		return;
+	}
+
 	nextflixDesktopState = "later";
 	imageOverlay.classList.add("later");
 	imageOverlay.classList.remove("fading");
@@ -1572,13 +1628,17 @@ function finishNextflixVideo() {
 		imageOverlay.classList.add("fading");
 		laterFadeTimer = window.setTimeout(() => {
 			closeNextflixDesktop();
-			startStage(stages[1]);
+			const getSodaStage = stages.find((stage) => stage.name === "get-soda");
+			if (getSodaStage) {
+				startStage(getSodaStage);
+			}
 		}, 1000);
 	}, NEXTFLIX_LATER_SECONDS * 1000);
 }
 
-function playNextflixVideo(index: number) {
+function playNextflixVideo(index: number, returnMode: "later" | "winded-with-sleck" = "later") {
 	nextflixDesktopState = "video";
+	nextflixVideoReturn = returnMode;
 	imageOverlay.style.cursor = "";
 	imageOverlayImage.hidden = true;
 	imageOverlayVideo.hidden = false;
@@ -1600,6 +1660,57 @@ function openNextflixDesktop() {
 	setControlsSuspended(true);
 }
 
+function closeSleckDesktop() {
+	nextflixDesktopState = "closed";
+	imageOverlay.hidden = true;
+	simulationPaused = false;
+	setControlsSuspended(false);
+	prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+	updateInteractionFocus();
+}
+
+function openSleckDesktop() {
+	resetNextflixOverlayMedia();
+	nextflixDesktopState = "winded-with-sleck";
+	imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.windedWithSleck;
+	imageOverlayImage.hidden = false;
+	imageOverlay.hidden = false;
+	prompt.hidden = true;
+	simulationPaused = true;
+	setControlsSuspended(true);
+}
+
+function showSleckMessages() {
+	nextflixDesktopState = "sleck";
+	imageOverlayImage.hidden = true;
+	imageOverlayVideo.hidden = true;
+	laterCard.hidden = true;
+	sleckUi ??= new SleckUi(imageOverlay, { onClose: closeSleckDesktop });
+	sleckUi.open();
+}
+
+function closeSogoUpdate() {
+	imageOverlay.hidden = true;
+	simulationPaused = false;
+	setControlsSuspended(false);
+	prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+	updateInteractionFocus();
+}
+
+function openSogoUpdate() {
+	resetNextflixOverlayMedia();
+	nextflixDesktopState = "closed";
+	imageOverlayImage.hidden = true;
+	imageOverlayVideo.hidden = true;
+	laterCard.hidden = true;
+	imageOverlay.hidden = false;
+	prompt.hidden = true;
+	simulationPaused = true;
+	setControlsSuspended(true);
+	sogoUi ??= new SogoUi(imageOverlay, { onClose: closeSogoUpdate });
+	sogoUi.open();
+}
+
 function interact() {
 	if (!levelReady || simulationPaused) {
 		return;
@@ -1607,10 +1718,22 @@ function interact() {
 
 	const interactable = focusedInteractable ?? findFocusedInteractable();
 	if (interactable?.action === "open-nextflix-desktop") {
+		completeStageInteraction(interactable);
 		openNextflixDesktop();
 		return;
 	}
+	if (interactable?.action === "open-sleck-desktop") {
+		completeStageInteraction(interactable);
+		openSleckDesktop();
+		return;
+	}
+	if (interactable?.action === "open-sogo-update") {
+		completeStageInteraction(interactable);
+		openSogoUpdate();
+		return;
+	}
 	if (interactable?.action === "get-soda") {
+		completeStageInteraction(interactable);
 		setStatus("Soda machine selected.");
 		return;
 	}
@@ -3474,27 +3597,43 @@ function setupEvents() {
 		const point = imageOverlayCoordinates(event);
 		const clickable =
 			(nextflixDesktopState === "winded" && isNextflixHotspot(point)) ||
+			(nextflixDesktopState === "winded-with-sleck" && (isNextflixHotspot(point) || isSleckHotspot(point))) ||
 			(nextflixDesktopState === "selection" && nextflixVideoIndexAt(point) !== null);
 		imageOverlay.style.cursor = clickable ? "pointer" : "";
 	});
 
 	imageOverlay.addEventListener("click", (event) => {
-		if (nextflixDesktopState === "video" || nextflixDesktopState === "later") {
+		if (nextflixDesktopState === "video" || nextflixDesktopState === "later" || nextflixDesktopState === "sleck") {
 			return;
 		}
 		const point = imageOverlayCoordinates(event);
 		if (nextflixDesktopState === "winded") {
 			if (isNextflixHotspot(point)) {
 				nextflixDesktopState = "selection";
+				nextflixVideoReturn = "later";
 				imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.selection;
 				imageOverlay.style.cursor = "";
+			}
+			return;
+		}
+		if (nextflixDesktopState === "winded-with-sleck") {
+			if (isNextflixHotspot(point)) {
+				nextflixDesktopState = "selection";
+				nextflixVideoReturn = "winded-with-sleck";
+				imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.selection;
+				imageOverlay.style.cursor = "";
+				return;
+			}
+			if (isSleckHotspot(point)) {
+				imageOverlay.style.cursor = "";
+				showSleckMessages();
 			}
 			return;
 		}
 		if (nextflixDesktopState === "selection") {
 			const index = nextflixVideoIndexAt(point);
 			if (index !== null) {
-				playNextflixVideo(index);
+				playNextflixVideo(index, nextflixVideoReturn);
 			}
 		}
 	});
@@ -3550,11 +3689,12 @@ async function loadLevel() {
 	}
 	for (const cylinderMesh of cylinderMeshes) {
 		staticCylinders.push(...createStaticCylinderColliders(cylinderMesh));
+		registerStaticInteractionTarget(cylinderMesh);
 		removeObjectFromParent(cylinderMesh);
 	}
 	for (const boxMesh of boxMeshes) {
 		staticBoxes.push(...createStaticBoxColliders(boxMesh));
-		registerStaticBoxInteractionTarget(boxMesh);
+		registerStaticInteractionTarget(boxMesh);
 		removeObjectFromParent(boxMesh);
 	}
 

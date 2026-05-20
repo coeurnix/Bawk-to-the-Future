@@ -36089,6 +36089,631 @@ var Octree = class _Octree {
   }
 };
 
+// client/src/sleck-ui.ts
+var SLECK_BACKGROUND_URL = "/assets/images/sleck-background.webp";
+var STEPHANIE_AVATAR_URL = "/assets/images/stephanie.webp";
+var stylesInstalled = false;
+function installSleckStyles() {
+  if (stylesInstalled) {
+    return;
+  }
+  stylesInstalled = true;
+  const style = document.createElement("style");
+  style.textContent = `
+		.sleck-desktop {
+			position: relative;
+			width: min(100%, calc((100vh - 36px) * 4 / 3));
+			max-height: 100%;
+			aspect-ratio: 4 / 3;
+			background: center / 100% 100% no-repeat url("${SLECK_BACKGROUND_URL}");
+			box-shadow: 0 20px 80px rgba(0, 0, 0, 0.58);
+			font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			color: #f6f7fb;
+			user-select: none;
+		}
+
+		.sleck-desktop[hidden] {
+			display: none;
+		}
+
+		.sleck-messages {
+			position: absolute;
+			left: 29.0%;
+			top: 14.7%;
+			width: 69.0%;
+			height: 73.5%;
+			overflow: auto;
+			display: flex;
+			flex-direction: column;
+			gap: clamp(9px, 1.0vw, 15px);
+			padding: clamp(14px, 1.8vw, 24px);
+			scrollbar-color: rgba(255, 38, 126, 0.55) rgba(8, 13, 17, 0.8);
+			scrollbar-width: thin;
+		}
+
+		.sleck-message {
+			display: grid;
+			grid-template-columns: clamp(30px, 3.3vw, 44px) minmax(0, auto);
+			gap: clamp(8px, 0.9vw, 12px);
+			align-items: end;
+			max-width: min(72%, 680px);
+		}
+
+		.sleck-message.you {
+			align-self: end;
+			grid-template-columns: minmax(0, auto);
+		}
+
+		.sleck-avatar,
+		.sleck-avatar-fallback {
+			width: clamp(30px, 3.3vw, 44px);
+			height: clamp(30px, 3.3vw, 44px);
+			border-radius: 50%;
+			background: linear-gradient(145deg, #fe3c90, #3ec7ff);
+			box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 6px 18px rgba(0, 0, 0, 0.32);
+		}
+
+		.sleck-avatar {
+			object-fit: cover;
+		}
+
+		.sleck-avatar-fallback {
+			display: grid;
+			place-items: center;
+			color: #fff;
+			font-weight: 800;
+		}
+
+		.sleck-bubble {
+			min-width: 0;
+			border: 1px solid rgba(255, 255, 255, 0.11);
+			border-radius: 14px;
+			padding: clamp(9px, 1vw, 13px) clamp(11px, 1.3vw, 16px);
+			background: rgba(19, 26, 31, 0.88);
+			color: rgba(246, 247, 251, 0.92);
+			font-size: clamp(12px, 1.17vw, 16px);
+			line-height: 1.34;
+			overflow-wrap: anywhere;
+			box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+		}
+
+		.sleck-message.you .sleck-bubble {
+			background: linear-gradient(135deg, rgba(255, 38, 126, 0.95), rgba(225, 32, 112, 0.95));
+			color: #fff;
+		}
+
+		.sleck-composer {
+			position: absolute;
+			left: 34.5%;
+			top: 90.45%;
+			width: 56.5%;
+			height: 5.55%;
+			border: 0;
+			outline: none;
+			background: transparent;
+			color: rgba(246, 247, 251, 0.95);
+			font: clamp(12px, 1.2vw, 17px) / 1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+			padding: 0 clamp(10px, 1.2vw, 16px);
+		}
+
+		.sleck-composer::placeholder {
+			color: rgba(246, 247, 251, 0.56);
+		}
+
+		.sleck-composer:disabled {
+			opacity: 0.55;
+			cursor: wait;
+		}
+
+		.sleck-send {
+			position: absolute;
+			left: 92.0%;
+			top: 89.55%;
+			width: 5.55%;
+			height: 7.15%;
+			border: 0;
+			background: transparent;
+			color: transparent;
+			cursor: pointer;
+		}
+
+		.sleck-send:disabled {
+			cursor: wait;
+			opacity: 0.55;
+		}
+	`;
+  document.head.append(style);
+}
+var SleckUi = class {
+  root;
+  messagesNode;
+  input;
+  send;
+  onClose;
+  messages = [
+    {
+      author: "stephanie",
+      text: "Hey. I found something weird in the update notes. Can you read this before Sunders sees it?"
+    }
+  ];
+  sending = false;
+  constructor(parent, options = {}) {
+    installSleckStyles();
+    this.onClose = options.onClose;
+    this.root = document.createElement("div");
+    this.root.className = "sleck-desktop";
+    this.root.hidden = true;
+    this.messagesNode = document.createElement("div");
+    this.messagesNode.className = "sleck-messages";
+    this.input = document.createElement("input");
+    this.input.className = "sleck-composer";
+    this.input.type = "text";
+    this.input.maxLength = 500;
+    this.input.placeholder = "Type a message...";
+    this.send = document.createElement("button");
+    this.send.className = "sleck-send";
+    this.send.type = "button";
+    this.send.ariaLabel = "Send message";
+    this.root.append(this.messagesNode, this.input, this.send);
+    parent.append(this.root);
+    this.send.addEventListener("click", () => this.submit());
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.submit();
+        return;
+      }
+      event.stopPropagation();
+    });
+    this.input.addEventListener("keyup", (event) => event.stopPropagation());
+    this.root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+      }
+    });
+    this.render();
+  }
+  open() {
+    this.root.hidden = false;
+    this.input.focus();
+    this.scrollToBottom();
+  }
+  close() {
+    this.root.hidden = true;
+    this.onClose?.();
+  }
+  submit() {
+    if (this.sending) {
+      return;
+    }
+    const text = this.input.value.trim();
+    if (!text) {
+      this.input.focus();
+      return;
+    }
+    this.messages.push({ author: "you", text });
+    this.input.value = "";
+    this.sending = true;
+    this.render();
+    window.setTimeout(() => {
+      this.messages.push({
+        author: "stephanie",
+        text: "Okay, yes. That is exactly what I needed you to say. I am saving this thread."
+      });
+      this.sending = false;
+      this.render();
+    }, 650);
+  }
+  render() {
+    this.messagesNode.replaceChildren(...this.messages.map((message) => this.renderMessage(message)));
+    this.input.disabled = this.sending;
+    this.send.disabled = this.sending;
+    this.scrollToBottom();
+  }
+  renderMessage(message) {
+    const row = document.createElement("div");
+    row.className = `sleck-message ${message.author}`;
+    if (message.author === "stephanie") {
+      const avatar = document.createElement("img");
+      avatar.className = "sleck-avatar";
+      avatar.src = STEPHANIE_AVATAR_URL;
+      avatar.alt = "";
+      avatar.draggable = false;
+      avatar.addEventListener("error", () => {
+        const fallback = document.createElement("div");
+        fallback.className = "sleck-avatar-fallback";
+        fallback.textContent = "S";
+        avatar.replaceWith(fallback);
+      }, { once: true });
+      row.append(avatar);
+    }
+    const bubble = document.createElement("div");
+    bubble.className = "sleck-bubble";
+    bubble.textContent = message.text;
+    row.append(bubble);
+    return row;
+  }
+  scrollToBottom() {
+    window.requestAnimationFrame(() => {
+      this.messagesNode.scrollTop = this.messagesNode.scrollHeight;
+    });
+  }
+};
+
+// client/src/sogo-ui.ts
+var SOGO_BACKGROUND_URL = "/assets/images/sogo-background.webp";
+var SANDERS_AVATAR_COUNT = 9;
+var SOGO_RESPONSE_TEXT = "UPDATE REQUEST RECEIVED.\n\nSOGO requires executive affirmation before applying the pending governance update. Submit an instruction to proceed.";
+var DEFAULT_SUGGESTION = "I agree completely.";
+var stylesInstalled2 = false;
+function installSogoStyles() {
+  if (stylesInstalled2) {
+    return;
+  }
+  stylesInstalled2 = true;
+  const style = document.createElement("style");
+  style.textContent = `
+		.sogo-desktop {
+			position: relative;
+			width: min(100%, calc((100vh - 36px) * 4 / 3));
+			max-height: 100%;
+			aspect-ratio: 4 / 3;
+			background: center / 100% 100% no-repeat url("${SOGO_BACKGROUND_URL}");
+			box-shadow: 0 20px 80px rgba(0, 0, 0, 0.58);
+			font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			color: #bac99b;
+			user-select: none;
+		}
+
+		.sogo-desktop[hidden] {
+			display: none;
+		}
+
+		.sogo-visualizer {
+			position: absolute;
+			left: 3.05%;
+			top: 17.7%;
+			width: 93.9%;
+			height: 24.2%;
+			display: block;
+			mix-blend-mode: screen;
+		}
+
+		.sogo-response {
+			position: absolute;
+			left: 3.9%;
+			top: 49.0%;
+			width: 92.4%;
+			height: 12.0%;
+			overflow: auto;
+			padding: clamp(8px, 1.1vw, 16px);
+			color: rgba(187, 202, 151, 0.92);
+			font-size: clamp(10px, 1.06vw, 15px);
+			line-height: 1.42;
+			white-space: pre-wrap;
+			text-shadow: 0 0 8px rgba(139, 177, 106, 0.26);
+			scrollbar-color: rgba(177, 196, 139, 0.54) rgba(6, 12, 8, 0.7);
+			scrollbar-width: thin;
+		}
+
+		.sogo-responses-left {
+			position: absolute;
+			left: 35.4%;
+			top: 64.0%;
+			width: 28.3%;
+			height: 4.25%;
+			display: grid;
+			place-items: center;
+			color: rgba(188, 202, 153, 0.86);
+			font-size: clamp(9px, 1.05vw, 14px);
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			text-shadow: 0 0 8px rgba(154, 199, 113, 0.24);
+		}
+
+		.sogo-input {
+			position: absolute;
+			left: 3.6%;
+			top: 74.1%;
+			width: 59.7%;
+			height: 21.1%;
+			resize: none;
+			border: 0;
+			outline: none;
+			background: rgba(3, 10, 6, 0.42);
+			color: rgba(214, 223, 188, 0.95);
+			padding: clamp(10px, 1.25vw, 18px);
+			font: clamp(11px, 1.15vw, 16px) / 1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			text-shadow: 0 0 8px rgba(146, 191, 107, 0.2);
+		}
+
+		.sogo-input::placeholder {
+			color: rgba(188, 202, 153, 0.52);
+		}
+
+		.sogo-input:disabled {
+			opacity: 0.58;
+			cursor: wait;
+		}
+
+		.sogo-send {
+			position: absolute;
+			left: 46.0%;
+			top: 89.9%;
+			width: 18.2%;
+			height: 7.4%;
+			border: 0;
+			background: transparent;
+			color: transparent;
+			cursor: pointer;
+		}
+
+		.sogo-send:hover,
+		.sogo-send:focus-visible,
+		.sogo-suggestion:hover,
+		.sogo-suggestion:focus-visible {
+			filter: brightness(1.35);
+		}
+
+		.sogo-send:disabled {
+			opacity: 0.45;
+			cursor: wait;
+			filter: none;
+		}
+
+		.sogo-avatar {
+			position: absolute;
+			left: 73.525%;
+			top: 70.67%;
+			width: 18.75%;
+			height: 15.08%;
+			object-fit: contain;
+			object-position: center bottom;
+			opacity: 0.65;
+			pointer-events: none;
+			filter: drop-shadow(0 0 12px rgba(167, 198, 122, 0.14));
+		}
+
+		.sogo-suggestion {
+			position: absolute;
+			left: 69.0%;
+			top: 88.0%;
+			width: 27.4%;
+			height: 7.3%;
+			display: grid;
+			align-items: start;
+			justify-items: start;
+			border: 0;
+			background: transparent;
+			color: rgba(188, 202, 153, 0.92);
+			cursor: pointer;
+			padding: clamp(3px, 0.42vw, 6px) clamp(8px, 1.2vw, 16px) 0;
+			font: clamp(9px, 1.06vw, 15px) / 1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			text-align: left;
+			text-shadow: 0 0 8px rgba(146, 191, 107, 0.22);
+		}
+
+		.sogo-suggestion:disabled {
+			opacity: 0.5;
+			cursor: wait;
+			filter: none;
+		}
+	`;
+  document.head.append(style);
+}
+function sandersAvatarUrl(index) {
+  const clamped = Math.max(0, Math.min(SANDERS_AVATAR_COUNT - 1, Math.trunc(index)));
+  return `/assets/images/sanders_${String(clamped).padStart(2, "0")}.webp`;
+}
+var SogoUi = class {
+  root;
+  visualizer;
+  response;
+  responsesLeft;
+  input;
+  send;
+  avatar;
+  suggestion;
+  context;
+  onClose;
+  animationFrame = 0;
+  lastFrameTime = performance.now();
+  state = {
+    avatarIndex: 0,
+    responseText: SOGO_RESPONSE_TEXT,
+    responsesLeft: 3,
+    sending: false,
+    speakingUntil: performance.now() + 2200,
+    suggestionText: DEFAULT_SUGGESTION
+  };
+  constructor(parent, options = {}) {
+    installSogoStyles();
+    this.onClose = options.onClose;
+    this.root = document.createElement("div");
+    this.root.className = "sogo-desktop";
+    this.root.hidden = true;
+    this.visualizer = document.createElement("canvas");
+    this.visualizer.className = "sogo-visualizer";
+    this.response = document.createElement("div");
+    this.response.className = "sogo-response";
+    this.responsesLeft = document.createElement("div");
+    this.responsesLeft.className = "sogo-responses-left";
+    this.input = document.createElement("textarea");
+    this.input.className = "sogo-input";
+    this.input.maxLength = 500;
+    this.input.placeholder = "Type your instruction or question here...";
+    this.send = document.createElement("button");
+    this.send.className = "sogo-send";
+    this.send.type = "button";
+    this.send.ariaLabel = "Send response";
+    this.avatar = document.createElement("img");
+    this.avatar.className = "sogo-avatar";
+    this.avatar.alt = "";
+    this.avatar.draggable = false;
+    this.suggestion = document.createElement("button");
+    this.suggestion.className = "sogo-suggestion";
+    this.suggestion.type = "button";
+    const context = this.visualizer.getContext("2d");
+    if (!context) {
+      throw new Error("Could not create SOGO visualizer context.");
+    }
+    this.context = context;
+    this.root.append(
+      this.visualizer,
+      this.response,
+      this.responsesLeft,
+      this.input,
+      this.send,
+      this.avatar,
+      this.suggestion
+    );
+    parent.append(this.root);
+    this.send.addEventListener("click", () => this.submit());
+    this.suggestion.addEventListener("click", () => {
+      this.input.value = this.state.suggestionText;
+      this.input.focus();
+    });
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        this.submit();
+      }
+      event.stopPropagation();
+    });
+    this.input.addEventListener("keyup", (event) => event.stopPropagation());
+    this.root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+      }
+    });
+    this.render();
+  }
+  open() {
+    this.root.hidden = false;
+    this.input.value = "";
+    this.input.focus();
+    this.startAnimation();
+  }
+  close() {
+    this.root.hidden = true;
+    this.stopAnimation();
+    this.onClose?.();
+  }
+  setState(nextState) {
+    this.state = { ...this.state, ...nextState };
+    this.render();
+  }
+  submit() {
+    if (this.state.sending || this.state.responsesLeft <= 0) {
+      return;
+    }
+    const userText = this.input.value.trim();
+    this.setState({ sending: true });
+    window.setTimeout(() => {
+      const responsesLeft = Math.max(0, this.state.responsesLeft - 1);
+      this.setState({
+        avatarIndex: (this.state.avatarIndex + 1) % SANDERS_AVATAR_COUNT,
+        responseText: [
+          "ACKNOWLEDGED.",
+          userText ? `USER INSTRUCTION: ${userText}` : "NO USER INSTRUCTION PROVIDED.",
+          "Pending SOGO update remains queued for final approval."
+        ].join("\n\n"),
+        responsesLeft,
+        sending: false,
+        speakingUntil: performance.now() + 2600,
+        suggestionText: responsesLeft > 1 ? "Proceed with the update." : DEFAULT_SUGGESTION
+      });
+    }, 850);
+  }
+  render() {
+    this.response.textContent = this.state.responseText;
+    this.responsesLeft.textContent = `${this.state.responsesLeft} ${this.state.responsesLeft === 1 ? "RESPONSE" : "RESPONSES"} LEFT`;
+    this.input.disabled = this.state.sending;
+    this.send.disabled = this.state.sending || this.state.responsesLeft <= 0;
+    this.suggestion.disabled = this.state.sending;
+    this.avatar.src = sandersAvatarUrl(this.state.avatarIndex);
+    this.suggestion.textContent = this.state.suggestionText;
+  }
+  startAnimation() {
+    this.resizeVisualizer();
+    this.lastFrameTime = performance.now();
+    if (!this.animationFrame) {
+      this.animationFrame = window.requestAnimationFrame((time) => this.draw(time));
+    }
+  }
+  stopAnimation() {
+    if (this.animationFrame) {
+      window.cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = 0;
+    }
+  }
+  resizeVisualizer() {
+    const rect = this.visualizer.getBoundingClientRect();
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const width = Math.max(1, Math.round(rect.width * pixelRatio));
+    const height = Math.max(1, Math.round(rect.height * pixelRatio));
+    if (this.visualizer.width !== width || this.visualizer.height !== height) {
+      this.visualizer.width = width;
+      this.visualizer.height = height;
+    }
+  }
+  draw(time) {
+    this.animationFrame = window.requestAnimationFrame((nextTime) => this.draw(nextTime));
+    this.resizeVisualizer();
+    const deltaSeconds = Math.min(0.05, (time - this.lastFrameTime) / 1e3);
+    this.lastFrameTime = time;
+    const ctx = this.context;
+    const width = this.visualizer.width;
+    const height = this.visualizer.height;
+    ctx.clearRect(0, 0, width, height);
+    const speaking = time < this.state.speakingUntil || this.state.sending;
+    const centerY = height * 0.54;
+    const phase = time * (speaking ? 9e-3 : 4e-3);
+    const heartBeat = Math.pow(Math.max(0, Math.sin(time * 6e-3)), 10);
+    const idleAmplitude = height * (0.055 + heartBeat * 0.065);
+    const speechAmplitude = height * (0.1 + 0.045 * Math.sin(time * 0.015));
+    const amplitude = speaking ? speechAmplitude : idleAmplitude;
+    for (let echo = 4; echo >= 0; echo -= 1) {
+      const alpha = echo === 0 ? 0.95 : 0.12 + (4 - echo) * 0.08;
+      const yOffset = echo * height * 0.018;
+      const xOffset = echo * width * 8e-3;
+      ctx.beginPath();
+      for (let x = -xOffset; x <= width + 2; x += Math.max(4, width / 190)) {
+        const normalized = x / width;
+        const carrier = Math.sin(normalized * Math.PI * 7 + phase - echo * 0.42);
+        const detail = Math.sin(normalized * Math.PI * 19 + phase * 1.37 + echo);
+        const voiceNoise = speaking ? Math.sin(normalized * Math.PI * 43 + time * 0.021) * height * 0.018 : 0;
+        const envelope = 0.18 + 0.82 * Math.sin(normalized * Math.PI);
+        const y = centerY + yOffset + (carrier * 0.78 + detail * 0.22) * amplitude * envelope + voiceNoise;
+        if (x <= -xOffset) {
+          ctx.moveTo(x + xOffset, y);
+        } else {
+          ctx.lineTo(x + xOffset, y);
+        }
+      }
+      ctx.strokeStyle = `rgba(174, 211, 137, ${alpha})`;
+      ctx.lineWidth = Math.max(1, width * (echo === 0 ? 2e-3 : 12e-4));
+      ctx.shadowColor = "rgba(126, 189, 102, 0.38)";
+      ctx.shadowBlur = echo === 0 ? width * 8e-3 : 0;
+      ctx.stroke();
+    }
+    if (deltaSeconds > 0) {
+      ctx.shadowBlur = 0;
+    }
+  }
+};
+
 // client/src/game.ts
 var GRAVITY = 30;
 var PLAYER_RADIUS = 0.35;
@@ -36150,10 +36775,12 @@ var TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
 var INTERACT_DISTANCE = 4;
 var NEXTFLIX_DESKTOP_IMAGES = {
   winded: "/assets/images/winded-no-sleck.webp",
+  windedWithSleck: "/assets/images/winded.webp",
   selection: "/assets/images/nextflix-selection.webp"
 };
 var NEXTFLIX_DESKTOP_SIZE = { width: 1280, height: 960 };
 var NEXTFLIX_HOTSPOT = { x: 73, y: 94, width: 260, height: 245 };
+var SLECK_HOTSPOT = { x: 72, y: 420, width: 250, height: 260 };
 var NEXTFLIX_VIDEO_GRID = { x: 24, y: 121, width: 1234, height: 821, columns: 5, rows: 4 };
 var NEXTFLIX_LATER_SECONDS = 4;
 var VISEME_MORPH_TARGETS = [
@@ -36565,9 +37192,12 @@ function createStaticBoxColliders(mesh) {
 function staticInteractionKey(name) {
   return name.replace(/\.\d+$/, "");
 }
-function registerStaticBoxInteractionTarget(mesh) {
+function isStaticInteractionMarker(mesh) {
+  return mesh.name.startsWith(STATIC_BOX_PREFIX) || staticInteractionKey(mesh.name) === "smcyl-sogo";
+}
+function registerStaticInteractionTarget(mesh) {
   const bounds = meshWorldBounds(mesh);
-  if (!bounds || !mesh.name.startsWith(STATIC_BOX_PREFIX)) {
+  if (!bounds || !isStaticInteractionMarker(mesh)) {
     return;
   }
   const helper = new Box3Helper(bounds, 16765514);
@@ -37046,10 +37676,26 @@ var activeInteractables = [];
 var focusedInteractable = null;
 var simulationPaused = false;
 var nextflixDesktopState = "closed";
+var nextflixVideoReturn = "later";
+var sleckUi = null;
+var sogoUi = null;
 var laterCardTimer = 0;
 var laterFadeTimer = 0;
 var staticBoxInteractionTargets = /* @__PURE__ */ new Map();
 var stages = [
+  {
+    name: "approve-sogo-update",
+    mission: "Approve SOGO Update.",
+    interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }]
+  },
+  {
+    name: "read-sleck-message",
+    mission: "Read Message.",
+    interactables: [
+      { object: "smbox-fun-desktop", action: "open-sleck-desktop" },
+      { object: "smbox-fun-desk", action: "open-sleck-desktop" }
+    ]
+  },
   {
     name: "watch-nextflix",
     mission: "Watch Nextflix on the computer.",
@@ -37143,6 +37789,14 @@ function setInteractionOutlines() {
     interactable.target.helper.visible = true;
   }
 }
+function completeStageInteraction(interactable) {
+  interactable.target.helper.visible = false;
+  activeInteractables = activeInteractables.filter((candidate) => candidate !== interactable);
+  setFocusedInteractable(null);
+  if (activeInteractables.length === 0) {
+    setMission("");
+  }
+}
 function startStage(stage) {
   activeStage = stage;
   setMission(stage.mission);
@@ -37193,6 +37847,7 @@ function resetNextflixOverlayMedia() {
   window.clearTimeout(laterFadeTimer);
   laterCardTimer = 0;
   laterFadeTimer = 0;
+  nextflixVideoReturn = "later";
   imageOverlay.classList.remove("later", "fading");
   imageOverlayImage.hidden = false;
   imageOverlayImage.removeAttribute("src");
@@ -37201,6 +37856,8 @@ function resetNextflixOverlayMedia() {
   imageOverlayVideo.load();
   imageOverlayVideo.hidden = true;
   laterCard.hidden = true;
+  sleckUi?.close();
+  sogoUi?.close();
   imageOverlay.style.cursor = "";
 }
 function closeNextflixDesktop() {
@@ -37224,6 +37881,9 @@ function imageOverlayCoordinates(event) {
 }
 function isNextflixHotspot(point) {
   return !!point && point.x >= NEXTFLIX_HOTSPOT.x && point.x <= NEXTFLIX_HOTSPOT.x + NEXTFLIX_HOTSPOT.width && point.y >= NEXTFLIX_HOTSPOT.y && point.y <= NEXTFLIX_HOTSPOT.y + NEXTFLIX_HOTSPOT.height;
+}
+function isSleckHotspot(point) {
+  return !!point && point.x >= SLECK_HOTSPOT.x && point.x <= SLECK_HOTSPOT.x + SLECK_HOTSPOT.width && point.y >= SLECK_HOTSPOT.y && point.y <= SLECK_HOTSPOT.y + SLECK_HOTSPOT.height;
 }
 function nextflixVideoIndexAt(point) {
   if (!point || point.x < NEXTFLIX_VIDEO_GRID.x || point.x > NEXTFLIX_VIDEO_GRID.x + NEXTFLIX_VIDEO_GRID.width || point.y < NEXTFLIX_VIDEO_GRID.y || point.y > NEXTFLIX_VIDEO_GRID.y + NEXTFLIX_VIDEO_GRID.height) {
@@ -37251,6 +37911,17 @@ function nextflixVideoUrl(index) {
   return supportsAv1Video() ? `/assets/videos/av1/vid-${number}-av1.mp4` : `/assets/videos/vid-${number}.mp4`;
 }
 function finishNextflixVideo() {
+  if (nextflixVideoReturn === "winded-with-sleck") {
+    nextflixDesktopState = "winded-with-sleck";
+    imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.windedWithSleck;
+    imageOverlayImage.hidden = false;
+    imageOverlayVideo.hidden = true;
+    imageOverlayVideo.pause();
+    imageOverlayVideo.removeAttribute("src");
+    imageOverlayVideo.load();
+    imageOverlay.style.cursor = "";
+    return;
+  }
   nextflixDesktopState = "later";
   imageOverlay.classList.add("later");
   imageOverlay.classList.remove("fading");
@@ -37261,12 +37932,16 @@ function finishNextflixVideo() {
     imageOverlay.classList.add("fading");
     laterFadeTimer = window.setTimeout(() => {
       closeNextflixDesktop();
-      startStage(stages[1]);
+      const getSodaStage = stages.find((stage) => stage.name === "get-soda");
+      if (getSodaStage) {
+        startStage(getSodaStage);
+      }
     }, 1e3);
   }, NEXTFLIX_LATER_SECONDS * 1e3);
 }
-function playNextflixVideo(index) {
+function playNextflixVideo(index, returnMode = "later") {
   nextflixDesktopState = "video";
+  nextflixVideoReturn = returnMode;
   imageOverlay.style.cursor = "";
   imageOverlayImage.hidden = true;
   imageOverlayVideo.hidden = false;
@@ -37286,16 +37961,74 @@ function openNextflixDesktop() {
   simulationPaused = true;
   setControlsSuspended(true);
 }
+function closeSleckDesktop() {
+  nextflixDesktopState = "closed";
+  imageOverlay.hidden = true;
+  simulationPaused = false;
+  setControlsSuspended(false);
+  prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+  updateInteractionFocus();
+}
+function openSleckDesktop() {
+  resetNextflixOverlayMedia();
+  nextflixDesktopState = "winded-with-sleck";
+  imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.windedWithSleck;
+  imageOverlayImage.hidden = false;
+  imageOverlay.hidden = false;
+  prompt.hidden = true;
+  simulationPaused = true;
+  setControlsSuspended(true);
+}
+function showSleckMessages() {
+  nextflixDesktopState = "sleck";
+  imageOverlayImage.hidden = true;
+  imageOverlayVideo.hidden = true;
+  laterCard.hidden = true;
+  sleckUi ??= new SleckUi(imageOverlay, { onClose: closeSleckDesktop });
+  sleckUi.open();
+}
+function closeSogoUpdate() {
+  imageOverlay.hidden = true;
+  simulationPaused = false;
+  setControlsSuspended(false);
+  prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+  updateInteractionFocus();
+}
+function openSogoUpdate() {
+  resetNextflixOverlayMedia();
+  nextflixDesktopState = "closed";
+  imageOverlayImage.hidden = true;
+  imageOverlayVideo.hidden = true;
+  laterCard.hidden = true;
+  imageOverlay.hidden = false;
+  prompt.hidden = true;
+  simulationPaused = true;
+  setControlsSuspended(true);
+  sogoUi ??= new SogoUi(imageOverlay, { onClose: closeSogoUpdate });
+  sogoUi.open();
+}
 function interact() {
   if (!levelReady || simulationPaused) {
     return;
   }
   const interactable = focusedInteractable ?? findFocusedInteractable();
   if (interactable?.action === "open-nextflix-desktop") {
+    completeStageInteraction(interactable);
     openNextflixDesktop();
     return;
   }
+  if (interactable?.action === "open-sleck-desktop") {
+    completeStageInteraction(interactable);
+    openSleckDesktop();
+    return;
+  }
+  if (interactable?.action === "open-sogo-update") {
+    completeStageInteraction(interactable);
+    openSogoUpdate();
+    return;
+  }
   if (interactable?.action === "get-soda") {
+    completeStageInteraction(interactable);
     setStatus("Soda machine selected.");
     return;
   }
@@ -38917,26 +39650,41 @@ function setupEvents() {
   });
   imageOverlay.addEventListener("mousemove", (event) => {
     const point = imageOverlayCoordinates(event);
-    const clickable = nextflixDesktopState === "winded" && isNextflixHotspot(point) || nextflixDesktopState === "selection" && nextflixVideoIndexAt(point) !== null;
+    const clickable = nextflixDesktopState === "winded" && isNextflixHotspot(point) || nextflixDesktopState === "winded-with-sleck" && (isNextflixHotspot(point) || isSleckHotspot(point)) || nextflixDesktopState === "selection" && nextflixVideoIndexAt(point) !== null;
     imageOverlay.style.cursor = clickable ? "pointer" : "";
   });
   imageOverlay.addEventListener("click", (event) => {
-    if (nextflixDesktopState === "video" || nextflixDesktopState === "later") {
+    if (nextflixDesktopState === "video" || nextflixDesktopState === "later" || nextflixDesktopState === "sleck") {
       return;
     }
     const point = imageOverlayCoordinates(event);
     if (nextflixDesktopState === "winded") {
       if (isNextflixHotspot(point)) {
         nextflixDesktopState = "selection";
+        nextflixVideoReturn = "later";
         imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.selection;
         imageOverlay.style.cursor = "";
+      }
+      return;
+    }
+    if (nextflixDesktopState === "winded-with-sleck") {
+      if (isNextflixHotspot(point)) {
+        nextflixDesktopState = "selection";
+        nextflixVideoReturn = "winded-with-sleck";
+        imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.selection;
+        imageOverlay.style.cursor = "";
+        return;
+      }
+      if (isSleckHotspot(point)) {
+        imageOverlay.style.cursor = "";
+        showSleckMessages();
       }
       return;
     }
     if (nextflixDesktopState === "selection") {
       const index = nextflixVideoIndexAt(point);
       if (index !== null) {
-        playNextflixVideo(index);
+        playNextflixVideo(index, nextflixVideoReturn);
       }
     }
   });
@@ -38985,11 +39733,12 @@ async function loadLevel() {
   }
   for (const cylinderMesh of cylinderMeshes) {
     staticCylinders.push(...createStaticCylinderColliders(cylinderMesh));
+    registerStaticInteractionTarget(cylinderMesh);
     removeObjectFromParent(cylinderMesh);
   }
   for (const boxMesh of boxMeshes) {
     staticBoxes.push(...createStaticBoxColliders(boxMesh));
-    registerStaticBoxInteractionTarget(boxMesh);
+    registerStaticInteractionTarget(boxMesh);
     removeObjectFromParent(boxMesh);
   }
   level.traverse((object) => {
