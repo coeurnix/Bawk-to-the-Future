@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "caption": "\"But sharing the update will make normal impossible. Please, help me help you.\"",
+  "duration": 5.021,
+  "audio": "dialogue-12-08.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.18,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.18,
+      "end": 0.32,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.056,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.32,
+      "end": 0.5,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.463,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.5,
+      "end": 0.64,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.65,
+      "jawOpen": 0.263
+    },
+    {
+      "start": 0.64,
+      "end": 0.92,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.588,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.92,
+      "end": 0.99,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.395,
+      "jawOpen": 0.206
+    },
+    {
+      "start": 0.99,
+      "end": 1.09,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.489,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.09,
+      "end": 1.13,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.085,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.13,
+      "end": 1.24,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.306,
+      "jawOpen": 0.187
+    },
+    {
+      "start": 1.24,
+      "end": 1.38,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.29,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.38,
+      "end": 1.46,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.586,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.46,
+      "end": 1.55,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.53,
+      "jawOpen": 0.236
+    },
+    {
+      "start": 1.55,
+      "end": 1.62,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.091,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.62,
+      "end": 1.76,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.799,
+      "jawOpen": 0.296
+    },
+    {
+      "start": 1.76,
+      "end": 1.83,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 1.0,
+      "jawOpen": 0.32
+    },
+    {
+      "start": 1.83,
+      "end": 1.91,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.991,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.91,
+      "end": 2.09,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.479,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.09,
+      "end": 2.17,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.554,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.17,
+      "end": 2.33,
+      "shape": "D",
+      "morphTarget": "AA_VI_10_aa",
+      "volume": 0.253,
+      "jawOpen": 0.257
+    },
+    {
+      "start": 2.33,
+      "end": 2.4,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.376,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.4,
+      "end": 2.48,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.307,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.48,
+      "end": 2.6,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.196,
+      "jawOpen": 0.162
+    },
+    {
+      "start": 2.6,
+      "end": 2.67,
+      "shape": "H",
+      "morphTarget": "AA_VI_04_DD",
+      "volume": 0.165,
+      "jawOpen": 0.165
+    },
+    {
+      "start": 2.67,
+      "end": 2.98,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.008,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.98,
+      "end": 3.08,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.08,
+      "end": 3.76,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.351,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.76,
+      "end": 3.83,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.874,
+      "jawOpen": 0.312
+    },
+    {
+      "start": 3.83,
+      "end": 3.96,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.301,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.96,
+      "end": 4.0,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.697,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.0,
+      "end": 4.18,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.491,
+      "jawOpen": 0.227
+    },
+    {
+      "start": 4.18,
+      "end": 4.26,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.439,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.26,
+      "end": 4.54,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.147,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.54,
+      "end": 5.02,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.002,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 5.02,
+      "end": 5.021,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

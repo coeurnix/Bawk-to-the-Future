@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "caption": "\"Well, it was nice meeting you. We\u2019ll do the soda thing later, okay?\"",
+  "duration": 6.212,
+  "audio": "dialogue-4-01.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.2,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.001,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.2,
+      "end": 0.31,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.437,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.31,
+      "end": 0.38,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 1.0,
+      "jawOpen": 0.34
+    },
+    {
+      "start": 0.38,
+      "end": 0.55,
+      "shape": "H",
+      "morphTarget": "AA_VI_04_DD",
+      "volume": 0.714,
+      "jawOpen": 0.293
+    },
+    {
+      "start": 0.55,
+      "end": 0.62,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.204,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.62,
+      "end": 0.69,
+      "shape": "G",
+      "morphTarget": "AA_VI_02_FF",
+      "volume": 0.032,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.69,
+      "end": 0.83,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.014,
+      "jawOpen": 0.122
+    },
+    {
+      "start": 0.83,
+      "end": 0.97,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.003,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.97,
+      "end": 1.2,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.2,
+      "end": 1.27,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.118,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.27,
+      "end": 1.33,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.178,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.33,
+      "end": 1.4,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.426,
+      "jawOpen": 0.213
+    },
+    {
+      "start": 1.4,
+      "end": 1.47,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.48,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.47,
+      "end": 1.68,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.379,
+      "jawOpen": 0.203
+    },
+    {
+      "start": 1.68,
+      "end": 1.89,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.179,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.89,
+      "end": 1.97,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.337,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.97,
+      "end": 2.25,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.394,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.25,
+      "end": 2.6,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.392,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.6,
+      "end": 3.02,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.097,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.02,
+      "end": 3.39,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.006,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.39,
+      "end": 3.43,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.071,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.43,
+      "end": 3.47,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.737,
+      "jawOpen": 0.282
+    },
+    {
+      "start": 3.47,
+      "end": 3.75,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.765,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.75,
+      "end": 4.03,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.456,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.03,
+      "end": 4.1,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.547,
+      "jawOpen": 0.24
+    },
+    {
+      "start": 4.1,
+      "end": 4.53,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.423,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.53,
+      "end": 4.62,
+      "shape": "H",
+      "morphTarget": "AA_VI_04_DD",
+      "volume": 0.038,
+      "jawOpen": 0.135
+    },
+    {
+      "start": 4.62,
+      "end": 4.69,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.604,
+      "jawOpen": 0.253
+    },
+    {
+      "start": 4.69,
+      "end": 4.76,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.27,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.76,
+      "end": 4.97,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.044,
+      "jawOpen": 0.121
+    },
+    {
+      "start": 4.97,
+      "end": 5.29,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.003,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 5.29,
+      "end": 5.63,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.265,
+      "jawOpen": 0.178
+    },
+    {
+      "start": 5.63,
+      "end": 5.7,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.142,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 5.7,
+      "end": 6.21,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.003,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 6.21,
+      "end": 6.212,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

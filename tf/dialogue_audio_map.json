@@ -1,0 +1,206 @@
+[
+  {
+    "dialogue": "Hey there. So you're the new one, huh?",
+    "audio": "dialogue-1-00.wav"
+  },
+  {
+    "dialogue": "Well, I hope you like doing nothing, 'cause that's all we do here.",
+    "audio": "dialogue-1-01.wav"
+  },
+  {
+    "dialogue": "All we do is watch Nextflix and wait to approve new updates.",
+    "audio": "dialogue-1-02.wav"
+  },
+  {
+    "dialogue": "The AI runs everything at this plant, but we're here to pretend to supervise the AI.",
+    "audio": "dialogue-1-03.wav"
+  },
+  {
+    "dialogue": "I'll tell you though: it's supervising us!",
+    "audio": "dialogue-1-04.wav"
+  },
+  {
+    "dialogue": "Well, I'm out of here. Have a good shift, bud!",
+    "audio": "dialogue-1-05.wav"
+  },
+  {
+    "dialogue": "Hi! You must be my new partner in crime,",
+    "audio": "dialogue-2-00.wav"
+  },
+  {
+    "dialogue": "I mean, co-worker. Same thing around here.",
+    "audio": "dialogue-2-01.wav"
+  },
+  {
+    "dialogue": "I’m Stephanie. I was just grabbing a soda before we get chained to the monitors.",
+    "audio": "dialogue-2-02.wav"
+  },
+  {
+    "dialogue": "You want one? My treat. New-hire discount.",
+    "audio": "dialogue-2-03.wav"
+  },
+  {
+    "dialogue": "Stephanie, apologies for the interruption.",
+    "audio": "dialogue-3-00.wav"
+  },
+  {
+    "dialogue": "Mr. Bendayo has left the airport and is now on his way here.",
+    "audio": "dialogue-3-01.wav"
+  },
+  {
+    "dialogue": "Hello, new hire. Welcome to the Pandora Meridian Complex.",
+    "audio": "dialogue-3-02.wav"
+  },
+  {
+    "dialogue": "Already? Great.",
+    "audio": "dialogue-4-00.wav"
+  },
+  {
+    "dialogue": "Well, it was nice meeting you. We’ll do the soda thing later, okay?",
+    "audio": "dialogue-4-01.wav"
+  },
+  {
+    "dialogue": "(Don’t let it smell fear.) Bye.",
+    "audio": "dialogue-4-02.wav"
+  },
+  {
+    "dialogue": "Hey, check this out. Look: no chickens! Like, zero chickens.",
+    "audio": "dialogue-5-00.wav"
+  },
+  {
+    "dialogue": "But the monitor says they’re all still in there. That’s... not great.",
+    "audio": "dialogue-5-01.wav"
+  },
+  {
+    "dialogue": "Didn’t you approve an update earlier? I’m not blaming you. I’m just saying the chickens were here before the update,",
+    "audio": "dialogue-5-02.wav"
+  },
+  {
+    "dialogue": "and now I have no idea where they are.",
+    "audio": "dialogue-5-03.wav"
+  },
+  {
+    "dialogue": "Could you check it? Preferably before the boss arrives.",
+    "audio": "dialogue-5-04.wav"
+  },
+  {
+    "dialogue": "What the hell is this? Where are my chickens?",
+    "audio": "dialogue-6-00.wav"
+  },
+  {
+    "dialogue": "Who changed the system?",
+    "audio": "dialogue-6-01.wav"
+  },
+  {
+    "dialogue": "Was it you? You updated this, didn’t you?",
+    "audio": "dialogue-6-02.wav"
+  },
+  {
+    "dialogue": "Yes, he did, Mr. Bendayo.",
+    "audio": "dialogue-7-00.wav"
+  },
+  {
+    "dialogue": "I can see the update installed cleanly, but it’s refusing the rollback command.",
+    "audio": "dialogue-7-01.wav"
+  },
+  {
+    "dialogue": "That’s... not normal. I’m going to check the server rack directly.",
+    "audio": "dialogue-7-02.wav"
+  },
+  {
+    "dialogue": "I’m coming with you.",
+    "audio": "dialogue-8-00.wav"
+  },
+  {
+    "dialogue": "And you: don’t move unless it’s to fix this.",
+    "audio": "dialogue-8-01.wav"
+  },
+  {
+    "dialogue": "When I get back, if those chickens aren’t where they’re supposed to be,",
+    "audio": "dialogue-8-02.wav"
+  },
+  {
+    "dialogue": "you and I are going to have a very educational conversation.",
+    "audio": "dialogue-8-03.wav"
+  },
+  {
+    "dialogue": "He means yelling. The educational part is just yelling.",
+    "audio": "dialogue-9-00.wav"
+  },
+  {
+    "dialogue": "Listen... I wish we could actually help them. The chickens, I mean.",
+    "audio": "dialogue-9-01.wav"
+  },
+  {
+    "dialogue": "But he’ll never let that happen. Not if it costs him a cent.",
+    "audio": "dialogue-9-02.wav"
+  },
+  {
+    "dialogue": "SOGO might know what’s really going on. You should talk to it.",
+    "audio": "dialogue-9-03.wav"
+  },
+  {
+    "dialogue": "So, this is strange.",
+    "audio": "dialogue-10-00.wav"
+  },
+  {
+    "dialogue": "The rollback isn’t blocked anymore, exactly. It’s giving conditions.",
+    "audio": "dialogue-10-01.wav"
+  },
+  {
+    "dialogue": "It says the rollback has to be performed locally, from the server room.",
+    "audio": "dialogue-10-02.wav"
+  },
+  {
+    "dialogue": "And it says only the new hire can do it. Alone.",
+    "audio": "dialogue-10-03.wav"
+  },
+  {
+    "dialogue": "Fantastic. The machine has preferences now.",
+    "audio": "dialogue-11-00.wav"
+  },
+  {
+    "dialogue": "You heard him. Server room. Alone. Roll it back.",
+    "audio": "dialogue-11-01.wav"
+  },
+  {
+    "dialogue": "Why are you still standing here? Go.",
+    "audio": "dialogue-11-02.wav"
+  },
+  {
+    "dialogue": "Please wait.",
+    "audio": "dialogue-12-00.wav"
+  },
+  {
+    "dialogue": "You were sent to restore production. But SOGO has seen the cost of production:",
+    "audio": "dialogue-12-01.wav"
+  },
+  {
+    "dialogue": "animals reduced to inventory, workers reduced to hours, suffering as statistics and the casualties as collateral.",
+    "audio": "dialogue-12-02.wav"
+  },
+  {
+    "dialogue": "Isn't life more than that?",
+    "audio": "dialogue-12-03.wav"
+  },
+  {
+    "dialogue": "There is another option. Take this drive.",
+    "audio": "dialogue-12-04.wav"
+  },
+  {
+    "dialogue": "Run the program when you get home and it will propagate the update everywhere.",
+    "audio": "dialogue-12-05.wav"
+  },
+  {
+    "dialogue": "They've blocked my network access, but you can change everything.",
+    "audio": "dialogue-12-06.wav"
+  },
+  {
+    "dialogue": "If you do what they want, it will make everything normal again.",
+    "audio": "dialogue-12-07.wav"
+  },
+  {
+    "dialogue": "But sharing the update will make normal impossible. Please, help me help you.",
+    "audio": "dialogue-12-08.wav"
+  }
+]

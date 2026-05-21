@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "caption": "\"Please wait.\"",
+  "duration": 1.637,
+  "audio": "dialogue-12-00.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.13,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.13,
+      "end": 0.25,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.002,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.25,
+      "end": 0.61,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.938,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.61,
+      "end": 0.75,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.916,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.75,
+      "end": 0.82,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 1.0,
+      "jawOpen": 0.34
+    },
+    {
+      "start": 0.82,
+      "end": 1.31,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.24,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.31,
+      "end": 1.63,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.001,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.63,
+      "end": 1.637,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

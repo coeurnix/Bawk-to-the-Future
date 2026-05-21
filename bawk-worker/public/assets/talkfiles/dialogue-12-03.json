@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "caption": "\"Isn't life more than that?\"",
+  "duration": 2.232,
+  "audio": "dialogue-12-03.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.36,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.36,
+      "end": 0.52,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.829,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.52,
+      "end": 0.59,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.937,
+      "jawOpen": 0.326
+    },
+    {
+      "start": 0.59,
+      "end": 0.8,
+      "shape": "H",
+      "morphTarget": "AA_VI_04_DD",
+      "volume": 0.624,
+      "jawOpen": 0.272
+    },
+    {
+      "start": 0.8,
+      "end": 0.87,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 1.0,
+      "jawOpen": 0.34
+    },
+    {
+      "start": 0.87,
+      "end": 0.94,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.499,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.94,
+      "end": 1.01,
+      "shape": "G",
+      "morphTarget": "AA_VI_02_FF",
+      "volume": 0.11,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.01,
+      "end": 1.09,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.737,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.09,
+      "end": 1.24,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.677,
+      "jawOpen": 0.253
+    },
+    {
+      "start": 1.24,
+      "end": 1.45,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.438,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.45,
+      "end": 1.59,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.539,
+      "jawOpen": 0.238
+    },
+    {
+      "start": 1.59,
+      "end": 1.87,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.176,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.87,
+      "end": 2.23,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.003,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.23,
+      "end": 2.232,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

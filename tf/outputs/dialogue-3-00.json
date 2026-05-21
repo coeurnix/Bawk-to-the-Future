@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "caption": "\"Stephanie, apologies for the interruption.\"",
+  "duration": 2.801,
+  "audio": "dialogue-3-00.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.24,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.001,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.24,
+      "end": 0.31,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.369,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.31,
+      "end": 0.52,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.676,
+      "jawOpen": 0.268
+    },
+    {
+      "start": 0.52,
+      "end": 0.8,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.625,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.8,
+      "end": 0.87,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.081,
+      "jawOpen": 0.137
+    },
+    {
+      "start": 0.87,
+      "end": 0.95,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.426,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.95,
+      "end": 1.12,
+      "shape": "D",
+      "morphTarget": "AA_VI_10_aa",
+      "volume": 0.431,
+      "jawOpen": 0.315
+    },
+    {
+      "start": 1.12,
+      "end": 1.19,
+      "shape": "H",
+      "morphTarget": "AA_VI_04_DD",
+      "volume": 1.0,
+      "jawOpen": 0.36
+    },
+    {
+      "start": 1.19,
+      "end": 1.26,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.846,
+      "jawOpen": 0.306
+    },
+    {
+      "start": 1.26,
+      "end": 1.82,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.47,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.82,
+      "end": 1.96,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.499,
+      "jawOpen": 0.229
+    },
+    {
+      "start": 1.96,
+      "end": 2.07,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.481,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.07,
+      "end": 2.19,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.307,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.19,
+      "end": 2.4,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.289,
+      "jawOpen": 0.183
+    },
+    {
+      "start": 2.4,
+      "end": 2.8,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.004,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.8,
+      "end": 2.801,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

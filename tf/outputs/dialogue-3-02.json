@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "caption": "\"Hello, new hire. Welcome to the Pandora Meridian Complex.\"",
+  "duration": 4.974,
+  "audio": "dialogue-3-02.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.17,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.004,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.17,
+      "end": 0.24,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.377,
+      "jawOpen": 0.202
+    },
+    {
+      "start": 0.24,
+      "end": 0.44,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 1.0,
+      "jawOpen": 0.32
+    },
+    {
+      "start": 0.44,
+      "end": 0.7,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.788,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.7,
+      "end": 0.75,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.183,
+      "jawOpen": 0.15
+    },
+    {
+      "start": 0.75,
+      "end": 0.93,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.498,
+      "jawOpen": 0.229
+    },
+    {
+      "start": 0.93,
+      "end": 1.07,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.183,
+      "jawOpen": 0.15
+    },
+    {
+      "start": 1.07,
+      "end": 2.09,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.01,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.09,
+      "end": 2.14,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.353,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.14,
+      "end": 2.4,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.898,
+      "jawOpen": 0.318
+    },
+    {
+      "start": 2.4,
+      "end": 2.48,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.612,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.48,
+      "end": 2.64,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.43,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.64,
+      "end": 2.72,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.331,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.72,
+      "end": 2.92,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.477,
+      "jawOpen": 0.224
+    },
+    {
+      "start": 2.92,
+      "end": 2.99,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.641,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.99,
+      "end": 3.2,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.801,
+      "jawOpen": 0.279
+    },
+    {
+      "start": 3.2,
+      "end": 3.27,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.653,
+      "jawOpen": 0.263
+    },
+    {
+      "start": 3.27,
+      "end": 3.29,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.531,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.29,
+      "end": 3.36,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.66,
+      "jawOpen": 0.265
+    },
+    {
+      "start": 3.36,
+      "end": 3.43,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.554,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.43,
+      "end": 3.76,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.498,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.76,
+      "end": 3.9,
+      "shape": "D",
+      "morphTarget": "AA_VI_10_aa",
+      "volume": 0.223,
+      "jawOpen": 0.248
+    },
+    {
+      "start": 3.9,
+      "end": 3.97,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.628,
+      "jawOpen": 0.258
+    },
+    {
+      "start": 3.97,
+      "end": 4.06,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.657,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.06,
+      "end": 4.16,
+      "shape": "H",
+      "morphTarget": "AA_VI_04_DD",
+      "volume": 0.082,
+      "jawOpen": 0.145
+    },
+    {
+      "start": 4.16,
+      "end": 4.3,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.18,
+      "jawOpen": 0.159
+    },
+    {
+      "start": 4.3,
+      "end": 4.51,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.32,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.51,
+      "end": 4.97,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.003,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 4.97,
+      "end": 4.974,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

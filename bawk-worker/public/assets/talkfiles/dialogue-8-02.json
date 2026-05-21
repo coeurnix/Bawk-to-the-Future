@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "caption": "\"When I get back, if those chickens aren\u2019t where they\u2019re supposed to be,\"",
+  "duration": 3.475,
+  "audio": "dialogue-8-02.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.13,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.013,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.13,
+      "end": 0.22,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.545,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.22,
+      "end": 0.36,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.512,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.36,
+      "end": 0.44,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.431,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.44,
+      "end": 0.71,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.548,
+      "jawOpen": 0.24
+    },
+    {
+      "start": 0.71,
+      "end": 0.85,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.226,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.85,
+      "end": 1.06,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.035,
+      "jawOpen": 0.127
+    },
+    {
+      "start": 1.06,
+      "end": 1.13,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.274,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.13,
+      "end": 1.2,
+      "shape": "G",
+      "morphTarget": "AA_VI_02_FF",
+      "volume": 0.209,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.2,
+      "end": 1.27,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.539,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.27,
+      "end": 1.41,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.578,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.41,
+      "end": 1.62,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.64,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.62,
+      "end": 1.83,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.741,
+      "jawOpen": 0.283
+    },
+    {
+      "start": 1.83,
+      "end": 1.9,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.549,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.9,
+      "end": 1.97,
+      "shape": "D",
+      "morphTarget": "AA_VI_10_aa",
+      "volume": 0.706,
+      "jawOpen": 0.405
+    },
+    {
+      "start": 1.97,
+      "end": 2.11,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.433,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.11,
+      "end": 2.18,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.61,
+      "jawOpen": 0.254
+    },
+    {
+      "start": 2.18,
+      "end": 2.32,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.687,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.32,
+      "end": 2.39,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 1.0,
+      "jawOpen": 0.34
+    },
+    {
+      "start": 2.39,
+      "end": 2.53,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.533,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.53,
+      "end": 2.61,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.345,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.61,
+      "end": 2.72,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.31,
+      "jawOpen": 0.176
+    },
+    {
+      "start": 2.72,
+      "end": 2.93,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.626,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.93,
+      "end": 3.01,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.638,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.01,
+      "end": 3.47,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.735,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.47,
+      "end": 3.475,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

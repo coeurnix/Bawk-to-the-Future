@@ -1330,17 +1330,17 @@ let laterFadeTimer = 0;
 const staticBoxInteractionTargets = new Map<string, StaticBoxInteractionTarget>();
 const stages: StageDefinition[] = [
 	{
-		name: "approve-sogo-update",
-		mission: "Approve SOGO Update.",
-		interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }],
-	},
-	{
 		name: "read-sleck-message",
 		mission: "Read Message.",
 		interactables: [
 			{ object: "smbox-fun-desktop", action: "open-sleck-desktop" },
 			{ object: "smbox-fun-desk", action: "open-sleck-desktop" },
 		],
+	},
+	{
+		name: "approve-sogo-update",
+		mission: "Approve SOGO Update.",
+		interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }],
 	},
 	{
 		name: "watch-nextflix",

@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "caption": "\"So, this is strange.\"",
+  "duration": 2.413,
+  "audio": "dialogue-10-00.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.07,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.004,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.07,
+      "end": 0.19,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.145,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.19,
+      "end": 0.33,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.314,
+      "jawOpen": 0.177
+    },
+    {
+      "start": 0.33,
+      "end": 0.4,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.116,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.4,
+      "end": 0.71,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.034,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.71,
+      "end": 1.5,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.374,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.5,
+      "end": 1.57,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 1.0,
+      "jawOpen": 0.34
+    },
+    {
+      "start": 1.57,
+      "end": 2.13,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.367,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.13,
+      "end": 2.41,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.001,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.41,
+      "end": 2.413,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "caption": "\"I\u2019m coming with you.\"",
+  "duration": 1.88,
+  "audio": "dialogue-8-00.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.23,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.006,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.23,
+      "end": 0.39,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.215,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.39,
+      "end": 0.55,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.124,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.55,
+      "end": 0.81,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.682,
+      "jawOpen": 0.27
+    },
+    {
+      "start": 0.81,
+      "end": 0.89,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.981,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.89,
+      "end": 1.0,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.99,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.0,
+      "end": 1.07,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 1.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.07,
+      "end": 1.28,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.711,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.28,
+      "end": 1.77,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.639,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.77,
+      "end": 1.87,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.022,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.87,
+      "end": 1.88,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}

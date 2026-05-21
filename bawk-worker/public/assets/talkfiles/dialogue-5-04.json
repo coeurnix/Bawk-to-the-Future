@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "caption": "\"Could you check it? Preferably before the boss arrives.\"",
+  "duration": 3.677,
+  "audio": "dialogue-5-04.mp3",
+  "tweenSeconds": 0.18,
+  "smoothing": "client applies damped morph smoothing after cue tweening",
+  "jawOpenMorphTarget": "SR_21_Jaw_Open",
+  "shapeMap": {
+    "A": "AA_VI_01_PP",
+    "B": "AA_VI_07_SS",
+    "C": "AA_VI_11_E",
+    "D": "AA_VI_10_aa",
+    "E": "AA_VI_13_O",
+    "F": "AA_VI_14_U",
+    "G": "AA_VI_02_FF",
+    "H": "AA_VI_04_DD",
+    "X": "AA_VI_00_Sil"
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 0.07,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.001,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.07,
+      "end": 0.38,
+      "shape": "F",
+      "morphTarget": "AA_VI_14_U",
+      "volume": 0.714,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 0.38,
+      "end": 1.08,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.413,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.08,
+      "end": 1.48,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.009,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.48,
+      "end": 1.64,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.033,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.64,
+      "end": 1.7,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.154,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.7,
+      "end": 1.76,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.758,
+      "jawOpen": 0.286
+    },
+    {
+      "start": 1.76,
+      "end": 1.83,
+      "shape": "G",
+      "morphTarget": "AA_VI_02_FF",
+      "volume": 0.111,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.83,
+      "end": 1.91,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.562,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 1.91,
+      "end": 2.02,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.622,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.02,
+      "end": 2.1,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 1.0,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.1,
+      "end": 2.19,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.37,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.19,
+      "end": 2.33,
+      "shape": "G",
+      "morphTarget": "AA_VI_02_FF",
+      "volume": 0.116,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.33,
+      "end": 2.47,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.424,
+      "jawOpen": 0.2
+    },
+    {
+      "start": 2.47,
+      "end": 2.55,
+      "shape": "A",
+      "morphTarget": "AA_VI_01_PP",
+      "volume": 0.25,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.55,
+      "end": 2.72,
+      "shape": "D",
+      "morphTarget": "AA_VI_10_aa",
+      "volume": 0.295,
+      "jawOpen": 0.271
+    },
+    {
+      "start": 2.72,
+      "end": 2.86,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.172,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 2.86,
+      "end": 3.0,
+      "shape": "E",
+      "morphTarget": "AA_VI_13_O",
+      "volume": 0.322,
+      "jawOpen": 0.179
+    },
+    {
+      "start": 3.0,
+      "end": 3.07,
+      "shape": "C",
+      "morphTarget": "AA_VI_11_E",
+      "volume": 0.357,
+      "jawOpen": 0.198
+    },
+    {
+      "start": 3.07,
+      "end": 3.14,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.339,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.14,
+      "end": 3.21,
+      "shape": "G",
+      "morphTarget": "AA_VI_02_FF",
+      "volume": 0.255,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.21,
+      "end": 3.42,
+      "shape": "B",
+      "morphTarget": "AA_VI_07_SS",
+      "volume": 0.113,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.42,
+      "end": 3.67,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0.001,
+      "jawOpen": 0.0
+    },
+    {
+      "start": 3.67,
+      "end": 3.677,
+      "shape": "X",
+      "morphTarget": "AA_VI_00_Sil",
+      "volume": 0,
+      "jawOpen": 0
+    }
+  ]
+}
