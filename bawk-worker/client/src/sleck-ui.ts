@@ -4,6 +4,8 @@ type SleckMessage = {
 };
 
 type SleckUiOptions = {
+	closeOnEscape?: boolean;
+	maxUserMessages?: number;
 	onClose?: () => void;
 };
 
@@ -149,6 +151,8 @@ export class SleckUi {
 	private readonly messagesNode: HTMLDivElement;
 	private readonly input: HTMLInputElement;
 	private readonly send: HTMLButtonElement;
+	private readonly closeOnEscape: boolean;
+	private readonly maxUserMessages: number;
 	private readonly onClose?: () => void;
 	private messages: SleckMessage[] = [
 		{
@@ -157,9 +161,12 @@ export class SleckUi {
 		},
 	];
 	private sending = false;
+	private userMessagesSent = 0;
 
 	constructor(parent: HTMLElement, options: SleckUiOptions = {}) {
 		installSleckStyles();
+		this.closeOnEscape = options.closeOnEscape ?? true;
+		this.maxUserMessages = options.maxUserMessages ?? Infinity;
 		this.onClose = options.onClose;
 		this.root = document.createElement("div");
 		this.root.className = "sleck-desktop";
@@ -184,7 +191,9 @@ export class SleckUi {
 		this.input.addEventListener("keydown", (event) => {
 			if (event.key === "Escape") {
 				event.preventDefault();
-				this.close();
+				if (this.closeOnEscape) {
+					this.close();
+				}
 				return;
 			}
 			if (event.key === "Enter") {
@@ -198,7 +207,9 @@ export class SleckUi {
 		this.root.addEventListener("keydown", (event) => {
 			if (event.key === "Escape") {
 				event.preventDefault();
-				this.close();
+				if (this.closeOnEscape) {
+					this.close();
+				}
 			}
 		});
 		this.render();
@@ -225,6 +236,7 @@ export class SleckUi {
 			return;
 		}
 		this.messages.push({ author: "you", text });
+		this.userMessagesSent += 1;
 		this.input.value = "";
 		this.sending = true;
 		this.render();
@@ -235,6 +247,9 @@ export class SleckUi {
 			});
 			this.sending = false;
 			this.render();
+			if (this.userMessagesSent >= this.maxUserMessages) {
+				window.setTimeout(() => this.close(), 550);
+			}
 		}, 650);
 	}
 

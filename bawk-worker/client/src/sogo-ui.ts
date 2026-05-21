@@ -8,7 +8,10 @@ type SogoUiState = {
 };
 
 type SogoUiOptions = {
+	autoCloseAtZero?: boolean;
+	closeOnEscape?: boolean;
 	onClose?: () => void;
+	responsesLeft?: number;
 };
 
 const SOGO_BACKGROUND_URL = "/assets/images/sogo-background.webp";
@@ -190,7 +193,10 @@ export class SogoUi {
 	private readonly avatar: HTMLImageElement;
 	private readonly suggestion: HTMLButtonElement;
 	private readonly context: CanvasRenderingContext2D;
+	private readonly autoCloseAtZero: boolean;
+	private readonly closeOnEscape: boolean;
 	private readonly onClose?: () => void;
+	private readonly initialResponsesLeft: number;
 	private animationFrame = 0;
 	private lastFrameTime = performance.now();
 	private state: SogoUiState = {
@@ -204,7 +210,10 @@ export class SogoUi {
 
 	constructor(parent: HTMLElement, options: SogoUiOptions = {}) {
 		installSogoStyles();
+		this.autoCloseAtZero = options.autoCloseAtZero ?? false;
+		this.closeOnEscape = options.closeOnEscape ?? true;
 		this.onClose = options.onClose;
+		this.initialResponsesLeft = options.responsesLeft ?? 3;
 		this.root = document.createElement("div");
 		this.root.className = "sogo-desktop";
 		this.root.hidden = true;
@@ -256,7 +265,9 @@ export class SogoUi {
 		this.input.addEventListener("keydown", (event) => {
 			if (event.key === "Escape") {
 				event.preventDefault();
-				this.close();
+				if (this.closeOnEscape) {
+					this.close();
+				}
 			}
 			if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
 				event.preventDefault();
@@ -268,13 +279,23 @@ export class SogoUi {
 		this.root.addEventListener("keydown", (event) => {
 			if (event.key === "Escape") {
 				event.preventDefault();
-				this.close();
+				if (this.closeOnEscape) {
+					this.close();
+				}
 			}
 		});
 		this.render();
 	}
 
 	open() {
+		this.setState({
+			avatarIndex: 0,
+			responseText: SOGO_RESPONSE_TEXT,
+			responsesLeft: this.initialResponsesLeft,
+			sending: false,
+			speakingUntil: performance.now() + 2200,
+			suggestionText: DEFAULT_SUGGESTION,
+		});
 		this.root.hidden = false;
 		this.input.value = "";
 		this.input.focus();
@@ -312,6 +333,9 @@ export class SogoUi {
 				speakingUntil: performance.now() + 2600,
 				suggestionText: responsesLeft > 1 ? "Proceed with the update." : DEFAULT_SUGGESTION,
 			});
+			if (this.autoCloseAtZero && responsesLeft <= 0) {
+				window.setTimeout(() => this.close(), 700);
+			}
 		}, 850);
 	}
 
