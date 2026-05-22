@@ -38473,6 +38473,7 @@ var mainMenuVideoActiveIndex = 0;
 var mainMenuVideoFrame = 0;
 var mainMenuVideoCrossfading = false;
 var mainMenuVideoFadeTimer = 0;
+var mainMenuVideoPreloaded = false;
 var positionVisible = false;
 var activeStage = null;
 var activeInteractables = [];
@@ -38546,6 +38547,31 @@ function preferredMainMenuSongUrl() {
   }
   return MAIN_MENU_SONG_SOURCES[MAIN_MENU_SONG_SOURCES.length - 1].url;
 }
+function ensureMainMenuSong() {
+  if (mainMenuMusic) {
+    return mainMenuMusic;
+  }
+  mainMenuMusic = new Audio(preferredMainMenuSongUrl());
+  mainMenuMusic.loop = true;
+  mainMenuMusic.preload = "auto";
+  mainMenuMusic.volume = 1;
+  mainMenuMusic.load();
+  return mainMenuMusic;
+}
+function preloadMainMenuMedia() {
+  ensureMainMenuSong();
+  const src = preferredVideoUrl(MAIN_MENU_VIDEO_AV1, MAIN_MENU_VIDEO_FALLBACK);
+  const videos = mainMenuVideos();
+  for (const video of videos) {
+    prepareMainMenuVideo(video, src);
+  }
+  resetMainMenuVideo(videos[0], "1", "1");
+  resetMainMenuVideo(videos[1], "0", "0");
+  mainMenuVideoActiveIndex = 0;
+  mainMenuVideoPreloaded = true;
+  videos[0].load();
+  videos[1].load();
+}
 function armMainMenuSongUnlock() {
   if (mainMenuSongUnlockArmed) {
     return;
@@ -38562,16 +38588,11 @@ function armMainMenuSongUnlock() {
 }
 function playMainMenuSong() {
   mainMenuSongWanted = true;
-  if (!mainMenuMusic) {
-    mainMenuMusic = new Audio(preferredMainMenuSongUrl());
-    mainMenuMusic.loop = true;
-    mainMenuMusic.preload = "auto";
-    mainMenuMusic.volume = 1;
-  }
-  if (!mainMenuMusic.paused) {
+  const audio = ensureMainMenuSong();
+  if (!audio.paused) {
     return;
   }
-  void mainMenuMusic.play().then(() => {
+  void audio.play().then(() => {
     mainMenuSongUnlockArmed = false;
   }).catch((error2) => {
     if (error2 instanceof DOMException && error2.name === "NotAllowedError") {
@@ -38674,10 +38695,9 @@ function watchMainMenuVideoLoop() {
   mainMenuVideoFrame = requestAnimationFrame(tick);
 }
 function startMainMenuBackgroundVideo() {
-  const src = preferredVideoUrl(MAIN_MENU_VIDEO_AV1, MAIN_MENU_VIDEO_FALLBACK);
   const videos = mainMenuVideos();
-  for (const video of videos) {
-    prepareMainMenuVideo(video, src);
+  if (!mainMenuVideoPreloaded) {
+    preloadMainMenuMedia();
   }
   mainMenuVideoActiveIndex = 0;
   mainMenuVideoCrossfading = false;
@@ -41519,6 +41539,7 @@ async function loadLevel() {
 }
 resizeRenderer();
 setupEvents();
+preloadMainMenuMedia();
 animate();
 loadLevel().catch((error2) => {
   console.error(error2);
