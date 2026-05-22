@@ -1,6 +1,20 @@
 type SleckMessage = {
 	author: "you" | "stephanie";
+	hearted?: boolean;
+	id: number;
 	text: string;
+};
+
+type SleckConversationMessage = {
+	role: "assistant" | "user";
+	content: string;
+};
+
+type SleckApiResponse = {
+	message: string;
+	hearted: boolean;
+	ended: boolean;
+	history: SleckConversationMessage[];
 };
 
 type SleckUiOptions = {
@@ -11,6 +25,13 @@ type SleckUiOptions = {
 
 const SLECK_BACKGROUND_URL = "/assets/images/sleck-background.webp";
 const STEPHANIE_AVATAR_URL = "/assets/images/stephanie.webp";
+const SLECK_RECEIVED_SOUND_URL = "/assets/sounds/sleck-received.mp3";
+const SLECK_HEART_SOUND_URL = "/assets/sounds/sleck-heart.mp3";
+const INITIAL_STEPHANIE_MESSAGE = "Hey! I was just thinking about you. What are you doing?";
+const PLOT_TWIST_MESSAGE =
+	"Uh, something really strange is going on! Can you help me figure it out? I'm in the shipping docks. Come find me! 😉";
+const DEFAULT_MAX_USER_MESSAGES = 15;
+const AUTO_PLOT_TWIST_TYPING_DELAY_MS = 3000;
 
 let stylesInstalled = false;
 
@@ -46,10 +67,11 @@ function installSleckStyles() {
 			overflow: auto;
 			display: flex;
 			flex-direction: column;
-			gap: clamp(9px, 1.0vw, 15px);
+			gap: clamp(7px, 0.75vw, 11px);
 			padding: clamp(14px, 1.8vw, 24px);
 			scrollbar-color: rgba(255, 38, 126, 0.55) rgba(8, 13, 17, 0.8);
 			scrollbar-width: thin;
+			overflow-anchor: none;
 		}
 
 		.sleck-message {
@@ -86,6 +108,7 @@ function installSleckStyles() {
 		}
 
 		.sleck-bubble {
+			position: relative;
 			min-width: 0;
 			border: 1px solid rgba(255, 255, 255, 0.11);
 			border-radius: 14px;
@@ -95,12 +118,44 @@ function installSleckStyles() {
 			font-size: clamp(12px, 1.17vw, 16px);
 			line-height: 1.34;
 			overflow-wrap: anywhere;
+			white-space: pre-line;
 			box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
 		}
 
 		.sleck-message.you .sleck-bubble {
 			background: linear-gradient(135deg, rgba(255, 38, 126, 0.95), rgba(225, 32, 112, 0.95));
 			color: #fff;
+		}
+
+		.sleck-message.hearted .sleck-bubble::after {
+			content: "\\2665";
+			position: absolute;
+			right: -8px;
+			bottom: -10px;
+			width: clamp(18px, 1.9vw, 25px);
+			height: clamp(18px, 1.9vw, 25px);
+			display: grid;
+			place-items: center;
+			border-radius: 50%;
+			background: #fff;
+			color: #ff267e;
+			font-size: clamp(12px, 1.25vw, 17px);
+			font-weight: 900;
+			box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32);
+		}
+
+		.sleck-typing {
+			font-style: italic;
+			animation: sleckTypingPulse 900ms ease-in-out infinite alternate;
+		}
+
+		@keyframes sleckTypingPulse {
+			from {
+				color: rgba(175, 181, 190, 0.62);
+			}
+			to {
+				color: rgba(255, 255, 255, 0.96);
+			}
 		}
 
 		.sleck-composer {
@@ -142,6 +197,31 @@ function installSleckStyles() {
 			cursor: wait;
 			opacity: 0.55;
 		}
+
+		.sleck-finished {
+			position: absolute;
+			left: 50%;
+			top: 48%;
+			transform: translate(-50%, -50%);
+			min-width: clamp(118px, 14vw, 184px);
+			border: 1px solid rgba(255, 255, 255, 0.24);
+			border-radius: 10px;
+			background: rgba(255, 38, 126, 0.94);
+			color: #fff;
+			cursor: pointer;
+			font: 800 clamp(14px, 1.35vw, 19px) / 1 Inter, ui-sans-serif, system-ui, sans-serif;
+			padding: clamp(10px, 1.1vw, 15px) clamp(18px, 2vw, 28px);
+			box-shadow: 0 16px 38px rgba(0, 0, 0, 0.36);
+		}
+
+		.sleck-finished:hover,
+		.sleck-finished:focus-visible {
+			filter: brightness(1.14);
+		}
+
+		.sleck-finished[hidden] {
+			display: none;
+		}
 	`;
 	document.head.append(style);
 }
@@ -151,22 +231,25 @@ export class SleckUi {
 	private readonly messagesNode: HTMLDivElement;
 	private readonly input: HTMLInputElement;
 	private readonly send: HTMLButtonElement;
+	private readonly finished: HTMLButtonElement;
 	private readonly closeOnEscape: boolean;
 	private readonly maxUserMessages: number;
 	private readonly onClose?: () => void;
-	private messages: SleckMessage[] = [
-		{
-			author: "stephanie",
-			text: "Hey. I found something weird in the update notes. Can you read this before Sunders sees it?",
-		},
-	];
+	private conversation: SleckConversationMessage[] = [];
+	private messages: SleckMessage[] = [];
 	private sending = false;
+	private typing = false;
+	private ended = false;
+	private messageId = 0;
+	private openToken = 0;
+	private initialTimer = 0;
+	private plotTwistTimer = 0;
 	private userMessagesSent = 0;
 
 	constructor(parent: HTMLElement, options: SleckUiOptions = {}) {
 		installSleckStyles();
 		this.closeOnEscape = options.closeOnEscape ?? true;
-		this.maxUserMessages = options.maxUserMessages ?? Infinity;
+		this.maxUserMessages = options.maxUserMessages ?? DEFAULT_MAX_USER_MESSAGES;
 		this.onClose = options.onClose;
 		this.root = document.createElement("div");
 		this.root.className = "sleck-desktop";
@@ -183,11 +266,18 @@ export class SleckUi {
 		this.send.className = "sleck-send";
 		this.send.type = "button";
 		this.send.ariaLabel = "Send message";
+		this.finished = document.createElement("button");
+		this.finished.className = "sleck-finished";
+		this.finished.type = "button";
+		this.finished.textContent = "Finished";
+		this.finished.hidden = true;
 
-		this.root.append(this.messagesNode, this.input, this.send);
+		this.root.append(this.messagesNode, this.input, this.send, this.finished);
 		parent.append(this.root);
 
-		this.send.addEventListener("click", () => this.submit());
+		this.send.addEventListener("click", () => void this.submit());
+		this.finished.addEventListener("click", () => this.close());
+		this.input.addEventListener("input", () => this.render());
 		this.input.addEventListener("keydown", (event) => {
 			if (event.key === "Escape") {
 				event.preventDefault();
@@ -198,7 +288,7 @@ export class SleckUi {
 			}
 			if (event.key === "Enter") {
 				event.preventDefault();
-				this.submit();
+				void this.submit();
 				return;
 			}
 			event.stopPropagation();
@@ -216,18 +306,45 @@ export class SleckUi {
 	}
 
 	open() {
+		const token = ++this.openToken;
+		window.clearTimeout(this.initialTimer);
 		this.root.hidden = false;
-		this.input.focus();
-		this.scrollToBottom();
+		this.conversation = [];
+		this.messages = [];
+		this.sending = false;
+		this.typing = true;
+		this.ended = false;
+		this.userMessagesSent = 0;
+		this.input.value = "";
+		this.finished.hidden = true;
+		this.render();
+		this.initialTimer = window.setTimeout(() => {
+			if (token !== this.openToken || this.root.hidden) {
+				return;
+			}
+			this.typing = false;
+			this.conversation = [{ role: "assistant", content: INITIAL_STEPHANIE_MESSAGE }];
+			this.messages.push({
+				author: "stephanie",
+				id: this.nextMessageId(),
+				text: INITIAL_STEPHANIE_MESSAGE,
+			});
+			this.render();
+			this.playSound(SLECK_RECEIVED_SOUND_URL);
+			this.input.focus();
+		}, 2000);
 	}
 
 	close() {
+		this.openToken += 1;
+		window.clearTimeout(this.initialTimer);
+		window.clearTimeout(this.plotTwistTimer);
 		this.root.hidden = true;
 		this.onClose?.();
 	}
 
-	private submit() {
-		if (this.sending) {
+	private async submit() {
+		if (this.sending || this.typing || this.ended) {
 			return;
 		}
 		const text = this.input.value.trim();
@@ -235,47 +352,106 @@ export class SleckUi {
 			this.input.focus();
 			return;
 		}
-		this.messages.push({ author: "you", text });
+		const userMessageId = this.nextMessageId();
+		const requestHistory = [...this.conversation];
 		this.userMessagesSent += 1;
+		this.messages.push({ author: "you", id: userMessageId, text });
 		this.input.value = "";
 		this.sending = true;
+		this.typing = true;
 		this.render();
-		window.setTimeout(() => {
+		try {
+			const response = await fetch("/api/sleck/respond", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					history: requestHistory,
+					message: text,
+					userMessageCount: this.userMessagesSent,
+				}),
+			});
+			if (!response.ok) {
+				throw new Error(`Sleck request failed with ${response.status}`);
+			}
+			const payload = (await response.json()) as SleckApiResponse;
+			this.conversation =
+				Array.isArray(payload.history) && payload.history.length > 0
+					? payload.history
+					: [...requestHistory, { role: "user", content: text }, { role: "assistant", content: payload.message }];
+			if (payload.hearted) {
+				const lastUserMessage = this.messages.find((message) => message.id === userMessageId);
+				if (lastUserMessage) {
+					lastUserMessage.hearted = true;
+				}
+			}
+			const autoPlotTwist = payload.ended && this.userMessagesSent >= this.maxUserMessages;
+			if (autoPlotTwist) {
+				this.sending = false;
+				this.typing = true;
+				this.render();
+				this.plotTwistTimer = window.setTimeout(() => {
+					if (this.root.hidden) {
+						return;
+					}
+					this.showStephanieMessage(PLOT_TWIST_MESSAGE, true);
+					this.playSound(SLECK_RECEIVED_SOUND_URL);
+				}, AUTO_PLOT_TWIST_TYPING_DELAY_MS);
+			} else {
+				this.showStephanieMessage(payload.ended ? PLOT_TWIST_MESSAGE : payload.message, payload.ended);
+				this.playSound(payload.hearted ? SLECK_HEART_SOUND_URL : SLECK_RECEIVED_SOUND_URL);
+				if (!this.ended) {
+					this.input.focus();
+				}
+			}
+		} catch (error) {
+			console.error(error);
 			this.messages.push({
 				author: "stephanie",
-				text: "Okay, yes. That is exactly what I needed you to say. I am saving this thread.",
+				id: this.nextMessageId(),
+				text: "sorry, Sleck is being weird on my end. try that again?",
 			});
 			this.sending = false;
+			this.typing = false;
 			this.render();
-			if (this.userMessagesSent >= this.maxUserMessages) {
-				window.setTimeout(() => this.close(), 550);
-			}
-		}, 650);
+			this.playSound(SLECK_RECEIVED_SOUND_URL);
+			this.input.focus();
+		}
+	}
+
+	private showStephanieMessage(text: string, ended: boolean) {
+		this.messages.push({
+			author: "stephanie",
+			id: this.nextMessageId(),
+			text,
+		});
+		this.ended = ended;
+		this.sending = false;
+		this.typing = false;
+		this.render();
+		if (this.ended) {
+			this.finished.hidden = false;
+			this.finished.focus();
+			this.render();
+		}
 	}
 
 	private render() {
-		this.messagesNode.replaceChildren(...this.messages.map((message) => this.renderMessage(message)));
-		this.input.disabled = this.sending;
-		this.send.disabled = this.sending;
+		const renderedMessages = this.messages.map((message) => this.renderMessage(message));
+		if (this.typing) {
+			renderedMessages.push(this.renderTyping());
+		}
+		this.messagesNode.replaceChildren(...renderedMessages);
+		const unavailable = this.sending || this.typing || this.ended;
+		this.input.disabled = unavailable;
+		this.send.disabled = unavailable || !this.input.value.trim();
 		this.scrollToBottom();
 	}
 
 	private renderMessage(message: SleckMessage) {
 		const row = document.createElement("div");
-		row.className = `sleck-message ${message.author}`;
+		row.className = `sleck-message ${message.author}${message.hearted ? " hearted" : ""}`;
 		if (message.author === "stephanie") {
-			const avatar = document.createElement("img");
-			avatar.className = "sleck-avatar";
-			avatar.src = STEPHANIE_AVATAR_URL;
-			avatar.alt = "";
-			avatar.draggable = false;
-			avatar.addEventListener("error", () => {
-				const fallback = document.createElement("div");
-				fallback.className = "sleck-avatar-fallback";
-				fallback.textContent = "S";
-				avatar.replaceWith(fallback);
-			}, { once: true });
-			row.append(avatar);
+			row.append(this.renderAvatar());
 		}
 		const bubble = document.createElement("div");
 		bubble.className = "sleck-bubble";
@@ -284,9 +460,52 @@ export class SleckUi {
 		return row;
 	}
 
+	private renderTyping() {
+		const row = document.createElement("div");
+		row.className = "sleck-message stephanie";
+		row.append(this.renderAvatar());
+		const bubble = document.createElement("div");
+		bubble.className = "sleck-bubble sleck-typing";
+		bubble.textContent = "Typing...";
+		row.append(bubble);
+		return row;
+	}
+
+	private renderAvatar() {
+		const avatar = document.createElement("img");
+		avatar.className = "sleck-avatar";
+		avatar.src = STEPHANIE_AVATAR_URL;
+		avatar.alt = "";
+		avatar.draggable = false;
+		avatar.addEventListener("error", () => {
+			const fallback = document.createElement("div");
+			fallback.className = "sleck-avatar-fallback";
+			fallback.textContent = "S";
+			avatar.replaceWith(fallback);
+		}, { once: true });
+		return avatar;
+	}
+
+	private nextMessageId() {
+		this.messageId += 1;
+		return this.messageId;
+	}
+
+	private playSound(url: string) {
+		const audio = new Audio(url);
+		audio.volume = 0.78;
+		audio.play().catch(() => {
+			// Browsers may block audio until the player interacts with the page.
+		});
+	}
+
 	private scrollToBottom() {
+		const scroll = () => {
+			this.messagesNode.scrollTo({ top: this.messagesNode.scrollHeight, behavior: "smooth" });
+		};
 		window.requestAnimationFrame(() => {
-			this.messagesNode.scrollTop = this.messagesNode.scrollHeight;
+			scroll();
+			window.requestAnimationFrame(scroll);
 		});
 	}
 }

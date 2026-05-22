@@ -42,6 +42,226 @@
 				pointer-events: none;
 			}
 
+			#entry-screen {
+				position: fixed;
+				inset: 0;
+				z-index: 60;
+				display: grid;
+				place-items: center;
+				padding: 28px;
+				background: #000;
+				color: #f7f3ed;
+				cursor: pointer;
+				pointer-events: auto;
+			}
+
+			#entry-screen[hidden] {
+				display: none;
+			}
+
+			.entry-screen-text {
+				width: min(720px, calc(100vw - 40px));
+				margin: 0;
+				font-family: "Avenir Next", "Trebuchet MS", ui-sans-serif, system-ui, sans-serif;
+				font-size: clamp(21px, 3.8vw, 36px);
+				font-weight: 650;
+				line-height: 1.22;
+				text-align: center;
+			}
+
+			.entry-screen-text a {
+				color: #f4c96e;
+				text-decoration-thickness: 2px;
+				text-underline-offset: 5px;
+				pointer-events: auto;
+			}
+
+			.entry-begin-line {
+				display: block;
+				margin-bottom: 28px;
+			}
+
+			.entry-github-row {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				gap: 7px;
+				margin-top: 18px;
+				color: rgba(247, 243, 237, 0.72);
+				font-size: clamp(12px, 1.8vw, 15px);
+				line-height: 1.25;
+			}
+
+			.entry-github-link {
+				display: inline-flex;
+				align-items: center;
+				gap: 7px;
+			}
+
+			.entry-github-license {
+				color: rgba(247, 243, 237, 0.72);
+			}
+
+			.entry-github-link svg {
+				width: 18px;
+				height: 18px;
+				flex: 0 0 auto;
+				fill: currentColor;
+			}
+
+			#main-menu {
+				position: fixed;
+				inset: 0;
+				display: flex;
+				align-items: flex-start;
+				justify-content: center;
+				padding: clamp(24px, 7vh, 72px) 28px 28px;
+				background: #fff;
+				z-index: 30;
+				pointer-events: auto;
+			}
+
+			#main-menu[hidden] {
+				display: none;
+			}
+
+			.main-menu-panel {
+				position: relative;
+				z-index: 3;
+				width: min(600px, calc(100vw - 36px));
+				text-align: center;
+				text-shadow: 0 3px 18px rgba(0, 0, 0, 0.78);
+			}
+
+			.main-menu-title {
+				margin: 0 0 6px;
+				font-size: clamp(42px, 8vw, 82px);
+				font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Trebuchet MS", cursive;
+				font-weight: 700;
+				line-height: 1.02;
+			}
+
+			.main-menu-author,
+			.main-menu-link {
+				color: rgba(243, 245, 247, 0.78);
+				font-size: 14px;
+				line-height: 1.5;
+			}
+
+			.main-menu-link {
+				display: inline-block;
+				margin-top: 4px;
+				pointer-events: auto;
+			}
+
+			#start-game-button {
+				width: min(340px, 100%);
+				height: 52px;
+				margin-top: 26px;
+				border: 0;
+				border-radius: 6px;
+				background: #f1c76a;
+				color: #101214;
+				font-size: 17px;
+				font-weight: 850;
+				cursor: pointer;
+				box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
+			}
+
+			#start-game-button:disabled {
+				background: rgba(243, 245, 247, 0.24);
+				color: rgba(243, 245, 247, 0.6);
+				cursor: wait;
+			}
+
+			#main-menu-loading {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 10px;
+				min-height: 30px;
+				margin-top: 14px;
+				color: rgba(243, 245, 247, 0.8);
+				font-size: 14px;
+			}
+
+			.main-menu-video-layer {
+				position: absolute;
+				inset: 0;
+				overflow: hidden;
+				background: #fff;
+			}
+
+			.main-menu-video-layer::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				z-index: 2;
+				background: linear-gradient(
+					180deg,
+					rgba(0, 0, 0, 0.58) 0%,
+					rgba(0, 0, 0, 0.18) 34%,
+					rgba(0, 0, 0, 0.08) 58%,
+					rgba(0, 0, 0, 0.62) 100%
+				);
+				pointer-events: none;
+			}
+
+			.main-menu-video-layer video {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				opacity: 0;
+			}
+
+			#main-menu-white-fade {
+				position: absolute;
+				inset: 0;
+				z-index: 5;
+				background: #fff;
+				opacity: 0;
+				pointer-events: none;
+			}
+
+			#ending-video-overlay {
+				position: fixed;
+				inset: 0;
+				z-index: 40;
+				background: #fff;
+			}
+
+			#ending-video-overlay[hidden] {
+				display: none;
+			}
+
+			#ending-video-overlay video {
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				display: block;
+			}
+
+			#main-menu-loading[hidden] {
+				display: none;
+			}
+
+			.menu-spinner {
+				width: 18px;
+				height: 18px;
+				border: 2px solid rgba(243, 245, 247, 0.22);
+				border-top-color: #f1c76a;
+				border-radius: 50%;
+				animation: menu-spin 900ms linear infinite;
+			}
+
+			@keyframes menu-spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+
 			#crosshair {
 				position: absolute;
 				left: 50%;
@@ -327,14 +547,121 @@
 				text-align: center;
 				text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 			}
+
+			#touch-controls {
+				position: absolute;
+				inset: 0;
+				display: none;
+				pointer-events: none;
+				touch-action: none;
+			}
+
+			.touch-stick {
+				position: absolute;
+				left: 20px;
+				bottom: 22px;
+				width: 132px;
+				height: 132px;
+				border: 1px solid rgba(255, 255, 255, 0.2);
+				border-radius: 50%;
+				background: rgba(5, 8, 10, 0.36);
+				pointer-events: auto;
+				touch-action: none;
+			}
+
+			#touch-stick-thumb {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				width: 54px;
+				height: 54px;
+				border-radius: 50%;
+				background: rgba(241, 199, 106, 0.82);
+				transform: translate(-50%, -50%);
+				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.36);
+			}
+
+			#touch-interact {
+				position: absolute;
+				right: 22px;
+				bottom: 34px;
+				width: 78px;
+				height: 78px;
+				border: 1px solid rgba(255, 255, 255, 0.24);
+				border-radius: 50%;
+				background: rgba(241, 199, 106, 0.88);
+				color: #101214;
+				font-size: 13px;
+				font-weight: 850;
+				pointer-events: auto;
+				touch-action: none;
+			}
+
+			#touch-look-zone {
+				position: absolute;
+				right: 0;
+				top: 0;
+				width: 64%;
+				height: 100%;
+				pointer-events: auto;
+				touch-action: none;
+			}
+
+			@media (pointer: coarse) {
+				#touch-controls.active {
+					display: block;
+				}
+
+				#prompt,
+				#status-line {
+					display: none;
+				}
+			}
 		</style>
 	</head>
 	<body>
 		<canvas id="game"></canvas>
+		<div id="entry-screen">
+			<p class="entry-screen-text">
+				<span class="entry-begin-line">Click anywhere to begin.</span>
+				Dreamed up by Coeurnix for the
+				<br />
+				<a href="https://itch.io/jam/token-jam-1" target="_blank" rel="noreferrer">Token Game Jam 1.</a>
+				<br />
+				<span class="entry-github-row">
+					<span class="entry-github-license">(MIT)</span>
+					<a href="https://github.com/coeurnix/Bawk-to-the-Future" target="_blank" rel="noreferrer">
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.92.58.11.79-.25.79-.56v-2.15c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18a10.93 10.93 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.8 1.19 1.83 1.19 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.13v3.17c0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
+					</svg>
+					<span>github.com/coeurnix/Bawk-to-the-Future</span>
+					</a>
+				</span>
+			</p>
+		</div>
+		<div id="main-menu" hidden>
+			<div class="main-menu-video-layer" aria-hidden="true">
+				<video id="main-menu-video-a" muted playsinline preload="auto"></video>
+				<video id="main-menu-video-b" muted playsinline preload="auto"></video>
+			</div>
+			<div class="main-menu-panel">
+				<h1 class="main-menu-title">Bawk to the Future</h1>
+				<div class="main-menu-author">By Coeurnix</div>
+				<button id="start-game-button" type="button" disabled>Start Game</button>
+				<div id="main-menu-loading">
+					<span class="menu-spinner" aria-hidden="true"></span>
+					<span id="main-menu-loading-text">Loading. Please wait...</span>
+				</div>
+			</div>
+			<div id="main-menu-white-fade" aria-hidden="true"></div>
+		</div>
+		<div id="ending-video-overlay" hidden>
+			<video id="ending-video" playsinline preload="auto"></video>
+		</div>
 		<div id="hud">
 			<div id="crosshair"></div>
 			<div id="mission-line"></div>
-			<div id="loading">Loading test level...</div>
+			<div id="loading" hidden>Loading test level...</div>
 			<div id="prompt" hidden>Click to capture mouse</div>
 			<div id="status-line">Preparing Bawk to the Future...</div>
 			<div id="caption-line" hidden></div>
@@ -371,6 +698,11 @@
 				<img id="image-overlay-image" alt="" draggable="false" />
 				<video id="image-overlay-video" playsinline hidden></video>
 				<div id="later-card" hidden>30 minutes later...</div>
+			</div>
+			<div id="touch-controls" aria-hidden="true">
+				<div id="touch-look-zone"></div>
+				<div id="touch-stick" class="touch-stick"><div id="touch-stick-thumb"></div></div>
+				<button id="touch-interact" type="button">Use</button>
 			</div>
 		</div>
 		<script type="module" src="/game.js"></script>

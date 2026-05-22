@@ -6,7 +6,7 @@ import { Octree } from "three/examples/jsm/math/Octree.js";
 import { Capsule } from "three/examples/jsm/math/Capsule.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { SleckUi } from "./sleck-ui";
-import { SogoUi } from "./sogo-ui";
+import { SogoUi, type SogoConversationMode } from "./sogo-ui";
 
 const GRAVITY = 30;
 const PLAYER_RADIUS = 0.35;
@@ -24,20 +24,37 @@ const JUMP_SPEED = 5.2;
 const JUMP_GRACE_SECONDS = 0.12;
 const PHYSICS_STEPS = 5;
 const COLLISION_PASSES = 3;
+const MAX_FRAME_RATE = 60;
+const FRAME_INTERVAL_MS = 1000 / MAX_FRAME_RATE;
 const NPC_SPAWN_DISTANCE = 2;
 const FLOOR_RAY_START_HEIGHT = 2;
 const FLOOR_RAY_DISTANCE = 6;
 const TELEPORT_FLOOR = -20;
-const DEFAULT_AMBIENT_INTENSITY = 0.55;
+const DEFAULT_AMBIENT_INTENSITY = 1.5;
 const DEFAULT_NPC_FILL_INTENSITY = 0.7;
 const NPC_NAV_GRID_PATH = "/assets/nav-grid.json";
 const RECT_LIGHT_PREFIX = "rect-light";
-const CEILING_LIGHTS_ENABLED = true;
-const CEILING_LIGHT_INTENSITY = 2.6;
-const CEILING_LIGHT_RANGE = 24;
-const CEILING_LIGHT_DECAY = 1.5;
-const CEILING_LIGHT_VISIBLE_DISTANCE = 4;
-const CEILING_LIGHT_VISIBLE_DISTANCE_SQ = CEILING_LIGHT_VISIBLE_DISTANCE ** 2;
+const OVERHEAD_LIGHT_INTENSITY = 2.45;
+const OVERHEAD_LIGHT_HEIGHT = 60;
+const OVERHEAD_LIGHT_SHADOW_RADIUS = 46;
+const OVERHEAD_LIGHT_SHADOW_FAR = 120;
+const OVERHEAD_SHADOW_PASSTHROUGH_MESH_NAMES = new Set([
+	"CEILING_TILES_MERGED",
+	"processing-ceiling",
+	"processing-ceiling.001",
+]);
+const WALL_MESH_PREFIX = "WALL_";
+const WALL_DEPTH_MATERIAL_NAMES = new Set([
+	"Interior Wall - pale concrete",
+	"Exterior Wall - warm white",
+]);
+const WALL_DEPTH_NEAR = 5.5;
+const WALL_DEPTH_FAR = 31;
+const WALL_DEPTH_STRENGTH = 0.46;
+const CEILING_TILE_MESH_NAME = "CEILING_TILES_MERGED";
+const CEILING_TILE_MATERIAL_NAME = "Ceiling_Tile_Tiling_Material";
+const FLOOR_TILE_MESH_NAME = "FLOOR_TILES_MERGED";
+const FLOOR_TILE_MATERIAL_NAME = "Floor_Tile_Tiling_Material";
 const CHAIR_PREFIX = "chair";
 const STATIC_CYLINDER_PREFIX = "smcyl-";
 const STATIC_BOX_PREFIX = "smbox-";
@@ -48,13 +65,16 @@ const STATIC_CYLINDER_COLLISION_SCALE = 0.92;
 const STATIC_BOX_COLLISION_SCALE = 0.96;
 const ANIMATION_BLEND_SECONDS = 0.5;
 const NPC_WALK_SPEED = 1.6;
+const NPC_WALK_ACCELERATION_SECONDS = 0.45;
+const ROBOT_MODEL_YAW_OFFSET = -Math.PI / 2;
 const NPC_TURN_BLEND_SECONDS = 0.28;
 const NPC_SCRIPTED_TURN_SECONDS = 0.3;
 const NPC_TURN_LOOKAHEAD_DISTANCE = 0.7;
 const NPC_NAV_CELL_SIZE = 0.5;
-const NPC_NAV_AGENT_RADIUS = 0.35;
+const NPC_NAV_AGENT_RADIUS = 0.62;
 const NPC_NAV_WALL_CHECK_HEIGHT = 0.75;
 const NPC_NAV_MAX_STEP_HEIGHT = 0.45;
+const NPC_NAV_CORNER_REACH_DISTANCE = 0.04;
 const HEAD_BLEND_SECONDS = 0;
 const HEAD_LOOK_X_LIMIT = 0.4;
 const HEAD_LOOK_Z_LIMIT = 0.25;
@@ -66,12 +86,29 @@ const TALKFILE_TWEEN_SECONDS = 0.18;
 const TALKFILE_SMOOTH_LAMBDA = 14;
 const TALKFILE_ROOT = "/assets/talkfiles";
 const TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
-const INTERACT_DISTANCE = 4;
+const INTERACT_DISTANCE = 2;
+const TOUCH_LOOK_SENSITIVITY = 0.004;
+const STAGE_1_PLAYER_X = -12;
+const STAGE_1_PLAYER_Z = -9.45;
+const STAGE_1_COWORKER_X = -14.27;
+const STAGE_1_COWORKER_Z = -10.61;
+const MIN_STAGE_INDEX = 1;
+const MAX_STAGE_INDEX = 13;
 const NEXTFLIX_DESKTOP_IMAGES = {
 	winded: "/assets/images/winded-no-sleck.webp",
 	windedWithSleck: "/assets/images/winded.webp",
 	selection: "/assets/images/nextflix-selection.webp",
 } as const;
+const MAIN_MENU_VIDEO_FADE_SECONDS = 1;
+const MAIN_MENU_VIDEO_AV1 = "/assets/videos/av1/starting-video-av1.mp4";
+const MAIN_MENU_VIDEO_FALLBACK = "/assets/videos/starting-video.mp4";
+const ENDING_VIDEO_AV1 = "/assets/videos/av1/ending-video-av1.mp4";
+const ENDING_VIDEO_FALLBACK = "/assets/videos/ending-video.mp4";
+const MAIN_MENU_SONG_SOURCES = [
+	{ url: "/assets/sounds/song.webm", type: 'audio/webm; codecs="opus"' },
+	{ url: "/assets/sounds/song.m4a", type: 'audio/mp4; codecs="mp4a.40.2"' },
+	{ url: "/assets/sounds/song.mp3", type: "audio/mpeg" },
+] as const;
 const NEXTFLIX_DESKTOP_SIZE = { width: 1280, height: 960 };
 const NEXTFLIX_HOTSPOT = { x: 73, y: 94, width: 260, height: 245 };
 const SLECK_HOTSPOT = { x: 72, y: 420, width: 250, height: 260 };
@@ -95,10 +132,19 @@ const VISEME_MORPH_TARGETS = [
 	"AA_VI_14_U",
 ] as const;
 const TALK_MORPH_TARGETS = [...VISEME_MORPH_TARGETS, TALK_JAW_OPEN_TARGET] as const;
-const DEFAULT_STATUS_TEXT =
-	"WASD move, mouse look, Shift sprint, Space jump, C crouch, E/LMB interact, ~ console, R reset";
+const DEFAULT_STATUS_TEXT = "";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
+const entryScreen = document.querySelector<HTMLDivElement>("#entry-screen");
+const mainMenu = document.querySelector<HTMLDivElement>("#main-menu");
+const startGameButton = document.querySelector<HTMLButtonElement>("#start-game-button");
+const mainMenuLoading = document.querySelector<HTMLDivElement>("#main-menu-loading");
+const mainMenuLoadingText = document.querySelector<HTMLSpanElement>("#main-menu-loading-text");
+const mainMenuVideoA = document.querySelector<HTMLVideoElement>("#main-menu-video-a");
+const mainMenuVideoB = document.querySelector<HTMLVideoElement>("#main-menu-video-b");
+const mainMenuWhiteFade = document.querySelector<HTMLDivElement>("#main-menu-white-fade");
+const endingVideoOverlay = document.querySelector<HTMLDivElement>("#ending-video-overlay");
+const endingVideo = document.querySelector<HTMLVideoElement>("#ending-video");
 const loading = document.querySelector<HTMLDivElement>("#loading");
 const prompt = document.querySelector<HTMLDivElement>("#prompt");
 const crosshair = document.querySelector<HTMLDivElement>("#crosshair");
@@ -119,9 +165,24 @@ const imageOverlay = document.querySelector<HTMLDivElement>("#image-overlay");
 const imageOverlayImage = document.querySelector<HTMLImageElement>("#image-overlay-image");
 const imageOverlayVideo = document.querySelector<HTMLVideoElement>("#image-overlay-video");
 const laterCard = document.querySelector<HTMLDivElement>("#later-card");
+const touchControls = document.querySelector<HTMLDivElement>("#touch-controls");
+const touchLookZone = document.querySelector<HTMLDivElement>("#touch-look-zone");
+const touchStick = document.querySelector<HTMLDivElement>("#touch-stick");
+const touchStickThumb = document.querySelector<HTMLDivElement>("#touch-stick-thumb");
+const touchInteract = document.querySelector<HTMLButtonElement>("#touch-interact");
 
 if (
 	!canvas ||
+	!entryScreen ||
+	!mainMenu ||
+	!startGameButton ||
+	!mainMenuLoading ||
+	!mainMenuLoadingText ||
+	!mainMenuVideoA ||
+	!mainMenuVideoB ||
+	!mainMenuWhiteFade ||
+	!endingVideoOverlay ||
+	!endingVideo ||
 	!loading ||
 	!prompt ||
 	!crosshair ||
@@ -141,7 +202,12 @@ if (
 	!imageOverlay ||
 	!imageOverlayImage ||
 	!imageOverlayVideo ||
-	!laterCard
+	!laterCard ||
+	!touchControls ||
+	!touchLookZone ||
+	!touchStick ||
+	!touchStickThumb ||
+	!touchInteract
 ) {
 	throw new Error("Game shell is missing required DOM nodes.");
 }
@@ -149,6 +215,7 @@ if (
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
@@ -160,6 +227,21 @@ camera.rotation.order = "YXZ";
 
 const ambientLight = new THREE.AmbientLight(0xffffff, DEFAULT_AMBIENT_INTENSITY);
 scene.add(ambientLight);
+
+const overheadLight = new THREE.DirectionalLight(0xffffff, OVERHEAD_LIGHT_INTENSITY);
+overheadLight.position.set(0, OVERHEAD_LIGHT_HEIGHT, 0);
+overheadLight.target.position.set(0, 0, 0);
+overheadLight.castShadow = true;
+overheadLight.shadow.mapSize.set(2048, 2048);
+overheadLight.shadow.camera.left = -OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.right = OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.top = OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.bottom = -OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.near = 0.5;
+overheadLight.shadow.camera.far = OVERHEAD_LIGHT_SHADOW_FAR;
+overheadLight.shadow.bias = -0.00015;
+overheadLight.shadow.normalBias = 0.035;
+scene.add(overheadLight, overheadLight.target);
 
 scene.add(camera);
 const audioListener = new THREE.AudioListener();
@@ -194,13 +276,14 @@ const availableModels = new Set([
 ]);
 const fallbackAnimations = [
 	"f_gestic_listen_accept_01",
-	"f_idle_neutral_01",
+	"f_idle_breathe_02",
 	"f_idle_touch_hair_01",
 	"m_gestic_talk_relaxed_01",
 	"m_idle_breathe_01",
 	"m_idle_scratch_head_01",
 ] as const;
 const preloadAnimations = [
+	"f_idle_breathe_02",
 	"f_walk_start",
 	"f_walk_neutral",
 	"f_walk_stop",
@@ -239,8 +322,8 @@ const talkAudioCache = new Map<string, AudioBuffer>();
 const chairs: ChairInstance[] = [];
 const staticCylinders: CylinderCollider[] = [];
 const staticBoxes: BoxCollider[] = [];
-const ceilingLights: THREE.PointLight[] = [];
 const actionStopTimers = new WeakMap<THREE.AnimationAction, number>();
+const wallDepthPlayerPosition = new THREE.Vector3();
 
 function isRectLightMarker(object: THREE.Object3D) {
 	return object.name.startsWith(RECT_LIGHT_PREFIX);
@@ -264,6 +347,22 @@ function isSimpleStaticMarker(object: THREE.Object3D) {
 
 function isDynamicLevelMarker(object: THREE.Object3D) {
 	return isRectLightMarker(object) || isSimpleStaticMarker(object);
+}
+
+function shouldPassOverheadShadow(object: THREE.Object3D) {
+	return isRectLightMarker(object) || OVERHEAD_SHADOW_PASSTHROUGH_MESH_NAMES.has(object.name);
+}
+
+function isWallDepthMesh(mesh: THREE.Mesh) {
+	return mesh.name.startsWith(WALL_MESH_PREFIX);
+}
+
+function isWallDepthMaterial(material: THREE.Material) {
+	return WALL_DEPTH_MATERIAL_NAMES.has(material.name);
+}
+
+function isNamedMaterial(material: THREE.Material, name: string) {
+	return material.name === name;
 }
 
 function toSingleInstanceMesh(mesh: THREE.Mesh) {
@@ -345,47 +444,6 @@ function createStaticCollisionRoot(level: THREE.Object3D) {
 	return collisionRoot;
 }
 
-function createCeilingLightsForInstances(mesh: THREE.InstancedMesh) {
-	if (!mesh.geometry.boundingBox) {
-		mesh.geometry.computeBoundingBox();
-	}
-
-	const geometryBounds = mesh.geometry.boundingBox;
-	if (!geometryBounds) {
-		return [];
-	}
-
-	const lights: THREE.PointLight[] = [];
-	const instanceLocalMatrix = new THREE.Matrix4();
-	const instanceWorldMatrix = new THREE.Matrix4();
-	const instanceBounds = new THREE.Box3();
-	const instanceCenter = new THREE.Vector3();
-
-	for (let index = 0; index < mesh.count; index += 1) {
-		mesh.getMatrixAt(index, instanceLocalMatrix);
-		instanceWorldMatrix.multiplyMatrices(mesh.matrixWorld, instanceLocalMatrix);
-		instanceBounds.copy(geometryBounds).applyMatrix4(instanceWorldMatrix);
-
-		if (instanceBounds.isEmpty()) {
-			continue;
-		}
-
-		instanceBounds.getCenter(instanceCenter);
-		const light = new THREE.PointLight(
-			0xffffff,
-			CEILING_LIGHT_INTENSITY,
-			CEILING_LIGHT_RANGE,
-			CEILING_LIGHT_DECAY,
-		);
-		light.name = `${mesh.name}-point-light-${index}`;
-		light.position.copy(instanceCenter);
-		light.visible = false;
-		lights.push(light);
-	}
-
-	return lights;
-}
-
 function collectMeshes(level: THREE.Object3D, predicate: (object: THREE.Object3D) => boolean) {
 	const meshes: THREE.Mesh[] = [];
 	level.traverse((object) => {
@@ -446,6 +504,162 @@ function createNonPbrInstancedMaterial(material: THREE.Material) {
 	nonPbrMaterial.visible = material.visible;
 	nonPbrMaterial.userData = { ...material.userData };
 	return nonPbrMaterial;
+}
+
+function createWallDepthMaterial(material: THREE.Material) {
+	const wallMaterial = material.clone();
+	wallMaterial.onBeforeCompile = (shader) => {
+		shader.uniforms.bawkWallPlayerPosition = { value: wallDepthPlayerPosition };
+		shader.uniforms.bawkWallNear = { value: WALL_DEPTH_NEAR };
+		shader.uniforms.bawkWallFar = { value: WALL_DEPTH_FAR };
+		shader.uniforms.bawkWallStrength = { value: WALL_DEPTH_STRENGTH };
+		shader.vertexShader = shader.vertexShader
+			.replace(
+				"#include <common>",
+				`#include <common>
+varying vec3 vBawkWallWorldPosition;
+varying vec3 vBawkWallWorldNormal;`,
+			)
+			.replace(
+				"#include <worldpos_vertex>",
+				`#include <worldpos_vertex>
+vBawkWallWorldPosition = worldPosition.xyz;
+vBawkWallWorldNormal = normalize(mat3(modelMatrix) * objectNormal);`,
+			);
+		shader.fragmentShader = shader.fragmentShader
+			.replace(
+				"#include <common>",
+				`#include <common>
+uniform vec3 bawkWallPlayerPosition;
+uniform float bawkWallNear;
+uniform float bawkWallFar;
+uniform float bawkWallStrength;
+varying vec3 vBawkWallWorldPosition;
+varying vec3 vBawkWallWorldNormal;`,
+			)
+			.replace(
+				"#include <dithering_fragment>",
+				`vec3 bawkWallNormal = normalize(vBawkWallWorldNormal);
+float bawkWallDistance = length(vBawkWallWorldPosition.xz - bawkWallPlayerPosition.xz);
+float bawkWallDistanceMix = smoothstep(bawkWallNear, bawkWallFar, bawkWallDistance);
+float bawkWallDepthShade = mix(1.0, 1.0 - bawkWallStrength, bawkWallDistanceMix);
+float bawkWallFacingShade = clamp(0.98 + bawkWallNormal.z * 0.055 - bawkWallNormal.x * 0.035, 0.9, 1.08);
+gl_FragColor.rgb *= bawkWallDepthShade * bawkWallFacingShade;
+#include <dithering_fragment>`,
+			);
+	};
+	wallMaterial.customProgramCacheKey = () => "bawk-wall-depth-v1";
+	wallMaterial.needsUpdate = true;
+	return wallMaterial;
+}
+
+function applyWallDepthMaterial(mesh: THREE.Mesh) {
+	if (!isWallDepthMesh(mesh)) {
+		return;
+	}
+	if (Array.isArray(mesh.material)) {
+		mesh.material = mesh.material.map((material) =>
+			isWallDepthMaterial(material) ? createWallDepthMaterial(material) : material,
+		);
+		return;
+	}
+	if (isWallDepthMaterial(mesh.material)) {
+		mesh.material = createWallDepthMaterial(mesh.material);
+	}
+}
+
+function createCeilingTileGridMaterial(material: THREE.Material) {
+	const tileMaterial = material.clone();
+	tileMaterial.onBeforeCompile = (shader) => {
+		shader.vertexShader = shader.vertexShader
+			.replace(
+				"#include <common>",
+				`#include <common>
+varying vec3 vBawkCeilingWorldPosition;`,
+			)
+			.replace(
+				"#include <worldpos_vertex>",
+				`#include <worldpos_vertex>
+vBawkCeilingWorldPosition = worldPosition.xyz;`,
+			);
+		shader.fragmentShader = shader.fragmentShader
+			.replace(
+				"#include <common>",
+				`#include <common>
+varying vec3 vBawkCeilingWorldPosition;`,
+			)
+			.replace(
+				"#include <dithering_fragment>",
+				`vec2 bawkCeilingTile = abs(fract(vBawkCeilingWorldPosition.xz * 1.0) - 0.5);
+float bawkCeilingGrid = 1.0 - smoothstep(0.018, 0.04, min(bawkCeilingTile.x, bawkCeilingTile.y));
+float bawkCeilingPanel = (step(0.5, fract(vBawkCeilingWorldPosition.x * 0.25)) - 0.5) * 0.024
+	+ (step(0.5, fract(vBawkCeilingWorldPosition.z * 0.25)) - 0.5) * 0.018;
+gl_FragColor.rgb *= 1.0 - bawkCeilingGrid * 0.18;
+gl_FragColor.rgb += bawkCeilingPanel;
+#include <dithering_fragment>`,
+			);
+	};
+	tileMaterial.customProgramCacheKey = () => "bawk-ceiling-grid-v1";
+	tileMaterial.needsUpdate = true;
+	return tileMaterial;
+}
+
+function createFloorCarpetMaterial(material: THREE.Material) {
+	const carpetMaterial = material.clone();
+	carpetMaterial.onBeforeCompile = (shader) => {
+		shader.vertexShader = shader.vertexShader
+			.replace(
+				"#include <common>",
+				`#include <common>
+varying vec3 vBawkFloorWorldPosition;`,
+			)
+			.replace(
+				"#include <worldpos_vertex>",
+				`#include <worldpos_vertex>
+vBawkFloorWorldPosition = worldPosition.xyz;`,
+			);
+		shader.fragmentShader = shader.fragmentShader
+			.replace(
+				"#include <common>",
+				`#include <common>
+varying vec3 vBawkFloorWorldPosition;`,
+			)
+			.replace(
+				"#include <dithering_fragment>",
+				`vec2 bawkFloorP = vBawkFloorWorldPosition.xz;
+float bawkFloorThreadA = step(0.5, fract(bawkFloorP.x * 7.5));
+float bawkFloorThreadB = step(0.5, fract(bawkFloorP.y * 8.5));
+float bawkFloorWeave = (bawkFloorThreadA + bawkFloorThreadB - 1.0) * 0.035;
+float bawkFloorNoise = fract(sin(dot(floor(bawkFloorP * 3.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+float bawkFloorTile = 1.0 - smoothstep(0.012, 0.032, min(abs(fract(bawkFloorP.x * 0.3333) - 0.5), abs(fract(bawkFloorP.y * 0.3333) - 0.5)));
+gl_FragColor.rgb *= 0.94 + bawkFloorWeave + bawkFloorNoise * 0.045 - bawkFloorTile * 0.035;
+#include <dithering_fragment>`,
+			);
+	};
+	carpetMaterial.customProgramCacheKey = () => "bawk-floor-carpet-v1";
+	carpetMaterial.needsUpdate = true;
+	return carpetMaterial;
+}
+
+function applyProceduralSurfaceMaterials(mesh: THREE.Mesh) {
+	if (Array.isArray(mesh.material)) {
+		mesh.material = mesh.material.map((material) => {
+			if (mesh.name === CEILING_TILE_MESH_NAME && isNamedMaterial(material, CEILING_TILE_MATERIAL_NAME)) {
+				return createCeilingTileGridMaterial(material);
+			}
+			if (mesh.name === FLOOR_TILE_MESH_NAME && isNamedMaterial(material, FLOOR_TILE_MATERIAL_NAME)) {
+				return createFloorCarpetMaterial(material);
+			}
+			return material;
+		});
+		return;
+	}
+	if (mesh.name === CEILING_TILE_MESH_NAME && isNamedMaterial(mesh.material, CEILING_TILE_MATERIAL_NAME)) {
+		mesh.material = createCeilingTileGridMaterial(mesh.material);
+	}
+	if (mesh.name === FLOOR_TILE_MESH_NAME && isNamedMaterial(mesh.material, FLOOR_TILE_MATERIAL_NAME)) {
+		mesh.material = createFloorCarpetMaterial(mesh.material);
+	}
 }
 
 function createInstancedMaterial(
@@ -864,21 +1078,19 @@ function canTraverseNavCells(grid: NpcNavGrid, fromX: number, fromZ: number, toX
 	const to = navCellCenter(grid, toX, toZ);
 	from.y += NPC_NAV_WALL_CHECK_HEIGHT;
 	to.y += NPC_NAV_WALL_CHECK_HEIGHT;
-	const direction = to.clone().sub(from).normalize();
-	const side = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(NPC_NAV_AGENT_RADIUS);
-	return !hasWallBetween(from, to) && !hasWallBetween(from.clone().add(side), to.clone().add(side)) && !hasWallBetween(from.clone().sub(side), to.clone().sub(side));
+	return !hasWallBetween(from, to);
 }
 
 function findNpcPath(from: THREE.Vector3, to: THREE.Vector3) {
 	const grid = npcNavGrid;
 	if (!grid) {
-		return [from.clone(), to.clone()];
+		return canNpcSteerDirectly(from, to) ? [from.clone(), to.clone()] : null;
 	}
 
 	const start = nearestWalkableCell(grid, from);
 	const goal = nearestWalkableCell(grid, to);
 	if (!start || !goal) {
-		return [from.clone(), to.clone()];
+		return canNpcSteerDirectly(from, to) ? [from.clone(), to.clone()] : null;
 	}
 
 	const startIndex = navCellIndex(grid, start.x, start.z);
@@ -943,7 +1155,7 @@ function findNpcPath(from: THREE.Vector3, to: THREE.Vector3) {
 		}
 	}
 
-	return [from.clone(), to.clone()];
+	return canNpcSteerDirectly(from, to) ? [from.clone(), to.clone()] : null;
 }
 
 function simplifyNpcPath(path: THREE.Vector3[]) {
@@ -956,9 +1168,7 @@ function simplifyNpcPath(path: THREE.Vector3[]) {
 	for (let index = 2; index < path.length; index += 1) {
 		const from = path[anchorIndex].clone();
 		const to = path[index].clone();
-		from.y += NPC_NAV_WALL_CHECK_HEIGHT;
-		to.y += NPC_NAV_WALL_CHECK_HEIGHT;
-		if (hasWallBetween(from, to)) {
+		if (!canNpcSteerDirectly(from, to)) {
 			simplified.push(path[index - 1]);
 			anchorIndex = index - 1;
 		}
@@ -1022,7 +1232,16 @@ function canNpcSteerDirectly(from: THREE.Vector3, to: THREE.Vector3) {
 	const rayTo = to.clone();
 	rayFrom.y += NPC_NAV_WALL_CHECK_HEIGHT;
 	rayTo.y += NPC_NAV_WALL_CHECK_HEIGHT;
-	return !hasWallBetween(rayFrom, rayTo);
+	const direction = rayTo.clone().sub(rayFrom);
+	direction.y = 0;
+	if (direction.lengthSq() <= 0.0001) {
+		return true;
+	}
+	direction.normalize();
+	const side = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(NPC_NAV_AGENT_RADIUS);
+	return !hasWallBetween(rayFrom, rayTo) &&
+		!hasWallBetween(rayFrom.clone().add(side), rayTo.clone().add(side)) &&
+		!hasWallBetween(rayFrom.clone().sub(side), rayTo.clone().sub(side));
 }
 
 function collidePlayerWithChairs() {
@@ -1248,6 +1467,7 @@ type NpcWalk = {
 	path: THREE.Vector3[];
 	segmentIndex: number;
 	speed: number;
+	currentSpeed: number;
 	stopStarted: boolean;
 };
 
@@ -1324,8 +1544,24 @@ type ActiveTalk = {
 	tweenSeconds: number;
 };
 
+type TouchMoveState = {
+	active: boolean;
+	pointerId: number | null;
+	centerX: number;
+	centerY: number;
+	x: number;
+	y: number;
+};
+
+type TouchLookState = {
+	pointerId: number | null;
+	lastX: number;
+	lastY: number;
+};
+
 let playerOnFloor = false;
 let levelReady = false;
+let gameStarted = false;
 let currentHeight = STAND_HEIGHT;
 let currentEye = STAND_EYE;
 let jumpQueued = false;
@@ -1337,11 +1573,18 @@ let npcFillIntensity = DEFAULT_NPC_FILL_INTENSITY;
 let playerMovementLocked = false;
 let playerViewLocked = false;
 let currentMusic: HTMLAudioElement | null = null;
+let mainMenuMusic: HTMLAudioElement | null = null;
+let mainMenuSongWanted = false;
+let mainMenuSongUnlockArmed = false;
+let mainMenuVideoActiveIndex = 0;
+let mainMenuVideoFrame = 0;
+let mainMenuVideoCrossfading = false;
+let mainMenuVideoFadeTimer = 0;
 let positionVisible = false;
 let activeStage: StageDefinition | null = null;
 let activeInteractables: ActiveInteractable[] = [];
 let focusedInteractable: ActiveInteractable | null = null;
-let simulationPaused = false;
+let simulationPaused = true;
 let nextflixDesktopState: "closed" | "winded" | "winded-with-sleck" | "selection" | "video" | "later" | "sleck" | "choice" = "closed";
 let nextflixVideoReturn: "later" | "winded-with-sleck" = "later";
 let sleckUi: SleckUi | null = null;
@@ -1352,10 +1595,303 @@ let stageFlowToken = 0;
 let pendingStageCompletion: { action: StageInteractableDefinition["action"] | "nextflix-finished"; resolve: () => void } | null = null;
 let updateNotificationAudio: HTMLAudioElement | null = null;
 let suppressUiCloseCompletion = false;
+let lastRenderMs = 0;
 const staticBoxInteractionTargets = new Map<string, StaticBoxInteractionTarget>();
+const touchMove: TouchMoveState = {
+	active: false,
+	pointerId: null,
+	centerX: 0,
+	centerY: 0,
+	x: 0,
+	y: 0,
+};
+const touchLook: TouchLookState = {
+	pointerId: null,
+	lastX: 0,
+	lastY: 0,
+};
 
 function setStatus(text: string) {
 	statusLine.textContent = text;
+}
+
+function updateTouchControlsVisibility() {
+	touchControls.classList.toggle("active", gameStarted && !simulationPaused && levelReady && !playerMovementLocked);
+}
+
+function setPlayerMovementLocked(locked: boolean) {
+	playerMovementLocked = locked;
+	if (locked) {
+		keyStates.clear();
+		resetTouchMove();
+		playerVelocity.x = 0;
+		playerVelocity.z = 0;
+	}
+	updateTouchControlsVisibility();
+}
+
+function updatePromptVisibility() {
+	prompt.hidden = !gameStarted || simulationPaused || consoleOpen || document.pointerLockElement === canvas || isCoarsePointer();
+}
+
+function setMainMenuLoadingState(ready: boolean, text = "Loading. Please wait...") {
+	startGameButton.disabled = !ready;
+	startGameButton.textContent = ready ? "Start Game" : "Start Game";
+	mainMenuLoading.hidden = ready;
+	mainMenuLoadingText.textContent = text;
+}
+
+function supportsAv1Video() {
+	const video = document.createElement("video");
+	const result = video.canPlayType('video/mp4; codecs="av01.0.05M.08"');
+	return result === "probably" || result === "maybe";
+}
+
+function preferredVideoUrl(av1Url: string, fallbackUrl: string) {
+	return supportsAv1Video() ? av1Url : fallbackUrl;
+}
+
+function preferredMainMenuSongUrl() {
+	const audio = document.createElement("audio");
+	for (const source of MAIN_MENU_SONG_SOURCES) {
+		const result = audio.canPlayType(source.type);
+		if (result === "probably" || result === "maybe") {
+			return source.url;
+		}
+	}
+	return MAIN_MENU_SONG_SOURCES[MAIN_MENU_SONG_SOURCES.length - 1].url;
+}
+
+function armMainMenuSongUnlock() {
+	if (mainMenuSongUnlockArmed) {
+		return;
+	}
+	mainMenuSongUnlockArmed = true;
+	const retry = () => {
+		mainMenuSongUnlockArmed = false;
+		if (mainMenuSongWanted && !mainMenu.hidden) {
+			playMainMenuSong();
+		}
+	};
+	document.addEventListener("pointerdown", retry, { once: true, capture: true });
+	document.addEventListener("keydown", retry, { once: true, capture: true });
+}
+
+function playMainMenuSong() {
+	mainMenuSongWanted = true;
+	if (!mainMenuMusic) {
+		mainMenuMusic = new Audio(preferredMainMenuSongUrl());
+		mainMenuMusic.loop = true;
+		mainMenuMusic.preload = "auto";
+		mainMenuMusic.volume = 1;
+	}
+	if (!mainMenuMusic.paused) {
+		return;
+	}
+	void mainMenuMusic
+		.play()
+		.then(() => {
+			mainMenuSongUnlockArmed = false;
+		})
+		.catch((error) => {
+			if (error instanceof DOMException && error.name === "NotAllowedError") {
+				armMainMenuSongUnlock();
+				return;
+			}
+			setConsoleLog(`Could not play main menu song: ${String(error)}`);
+		});
+}
+
+function stopMainMenuSong() {
+	mainMenuSongWanted = false;
+	if (!mainMenuMusic) {
+		return;
+	}
+	mainMenuMusic.pause();
+	mainMenuMusic.currentTime = 0;
+}
+
+function mainMenuVideos() {
+	return [mainMenuVideoA, mainMenuVideoB] as const;
+}
+
+function prepareMainMenuVideo(video: HTMLVideoElement, src: string) {
+	video.muted = true;
+	video.loop = false;
+	video.playsInline = true;
+	video.onended = () => {
+		if (mainMenuVideos()[mainMenuVideoActiveIndex] === video) {
+			startMainMenuVideoCrossfade();
+		}
+	};
+	if (video.getAttribute("src") !== src) {
+		video.src = src;
+	}
+	video.preload = "auto";
+}
+
+function resetMainMenuVideo(video: HTMLVideoElement, opacity: string, zIndex: string) {
+	video.style.transition = "";
+	video.style.opacity = opacity;
+	video.style.zIndex = zIndex;
+}
+
+function stopMainMenuBackgroundVideo() {
+	if (mainMenuVideoFrame) {
+		cancelAnimationFrame(mainMenuVideoFrame);
+		mainMenuVideoFrame = 0;
+	}
+	if (mainMenuVideoFadeTimer) {
+		window.clearTimeout(mainMenuVideoFadeTimer);
+		mainMenuVideoFadeTimer = 0;
+	}
+	mainMenuVideoCrossfading = false;
+	for (const video of mainMenuVideos()) {
+		video.pause();
+	}
+}
+
+function finishMainMenuVideoCrossfade(oldVideo: HTMLVideoElement, newVideo: HTMLVideoElement) {
+	oldVideo.pause();
+	oldVideo.currentTime = 0;
+	resetMainMenuVideo(oldVideo, "0", "0");
+	resetMainMenuVideo(newVideo, "1", "1");
+	mainMenuVideoActiveIndex = mainMenuVideos()[0] === newVideo ? 0 : 1;
+	mainMenuVideoCrossfading = false;
+	mainMenuVideoFadeTimer = 0;
+	watchMainMenuVideoLoop();
+}
+
+function startMainMenuVideoCrossfade() {
+	if (mainMenuVideoCrossfading || mainMenu.hidden) {
+		return;
+	}
+	const videos = mainMenuVideos();
+	const oldVideo = videos[mainMenuVideoActiveIndex];
+	const newVideo = videos[1 - mainMenuVideoActiveIndex];
+	mainMenuVideoCrossfading = true;
+	newVideo.currentTime = 0;
+	resetMainMenuVideo(newVideo, "1", "0");
+	void newVideo.play().catch((error) => {
+		setConsoleLog(`Could not play main menu background video: ${String(error)}`);
+	});
+	oldVideo.style.zIndex = "1";
+	oldVideo.style.transition = `opacity ${MAIN_MENU_VIDEO_FADE_SECONDS * 1000}ms linear`;
+	oldVideo.style.opacity = "0";
+	mainMenuVideoFadeTimer = window.setTimeout(
+		() => finishMainMenuVideoCrossfade(oldVideo, newVideo),
+		MAIN_MENU_VIDEO_FADE_SECONDS * 1000,
+	);
+}
+
+function watchMainMenuVideoLoop() {
+	if (mainMenuVideoFrame) {
+		cancelAnimationFrame(mainMenuVideoFrame);
+	}
+	const tick = () => {
+		if (mainMenu.hidden) {
+			mainMenuVideoFrame = 0;
+			return;
+		}
+		const activeVideo = mainMenuVideos()[mainMenuVideoActiveIndex];
+		if (
+			!mainMenuVideoCrossfading &&
+			Number.isFinite(activeVideo.duration) &&
+			activeVideo.duration > MAIN_MENU_VIDEO_FADE_SECONDS &&
+			activeVideo.currentTime >= activeVideo.duration - MAIN_MENU_VIDEO_FADE_SECONDS
+		) {
+			startMainMenuVideoCrossfade();
+		}
+		mainMenuVideoFrame = requestAnimationFrame(tick);
+	};
+	mainMenuVideoFrame = requestAnimationFrame(tick);
+}
+
+function startMainMenuBackgroundVideo() {
+	const src = preferredVideoUrl(MAIN_MENU_VIDEO_AV1, MAIN_MENU_VIDEO_FALLBACK);
+	const videos = mainMenuVideos();
+	for (const video of videos) {
+		prepareMainMenuVideo(video, src);
+	}
+	mainMenuVideoActiveIndex = 0;
+	mainMenuVideoCrossfading = false;
+	resetMainMenuVideo(videos[0], "1", "1");
+	resetMainMenuVideo(videos[1], "0", "0");
+	videos[1].pause();
+	videos[1].currentTime = 0;
+	if (videos[0].paused) {
+		videos[0].currentTime = 0;
+		void videos[0].play().catch((error) => {
+			setConsoleLog(`Could not play main menu background video: ${String(error)}`);
+		});
+	}
+	watchMainMenuVideoLoop();
+}
+
+function fadeMainMenuFromWhite() {
+	mainMenuWhiteFade.style.transition = "";
+	mainMenuWhiteFade.style.opacity = "1";
+	void mainMenuWhiteFade.offsetWidth;
+	mainMenuWhiteFade.style.transition = "opacity 1000ms ease";
+	mainMenuWhiteFade.style.opacity = "0";
+}
+
+function enterMainMenuFromEntryScreen() {
+	if (entryScreen.hidden) {
+		return;
+	}
+	entryScreen.hidden = true;
+	showMainMenu();
+}
+
+function showMainMenu(text = levelReady ? "" : "Loading. Please wait...") {
+	gameStarted = false;
+	simulationPaused = true;
+	mainMenu.hidden = false;
+	startMainMenuBackgroundVideo();
+	playMainMenuSong();
+	fadeMainMenuFromWhite();
+	setControlsSuspended(true);
+	setMission("");
+	setCaption("");
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
+	if (levelReady) {
+		setMainMenuLoadingState(true);
+	} else {
+		setMainMenuLoadingState(false, text);
+	}
+}
+
+function startGame() {
+	if (!levelReady || gameStarted) {
+		return;
+	}
+	gameStarted = true;
+	simulationPaused = false;
+	imageOverlay.hidden = true;
+	resetNextflixOverlayMedia();
+	setControlsSuspended(false);
+	currentHeight = STAND_HEIGHT;
+	currentEye = STAND_EYE;
+	playerVelocity.set(0, 0, 0);
+	jumpQueued = false;
+	jumpQueuedAt = -Infinity;
+	lastFloorTime = clock.elapsedTime;
+	placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
+	setCameraLookAt(gamePoint(STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z));
+	mainMenu.hidden = true;
+	stopMainMenuBackgroundVideo();
+	stopMainMenuSong();
+	updatePromptVisibility();
+	setStatus(DEFAULT_STATUS_TEXT);
+	stageFlowToken += 1;
+	void runGameStages(stageFlowToken).catch((error) => {
+		console.error(error);
+		setConsoleLog(`Game stage flow failed: ${String(error)}`);
+		showMainMenu("Game flow failed.");
+	});
+	updateTouchControlsVisibility();
 }
 
 function setMission(text: string) {
@@ -1407,7 +1943,7 @@ function createGltfLoader() {
 function setConsoleOpen(open: boolean) {
 	consoleOpen = open;
 	consolePanel.hidden = !open;
-	prompt.hidden = open || document.pointerLockElement === canvas;
+	updatePromptVisibility();
 
 	if (open) {
 		if (document.pointerLockElement === canvas) {
@@ -1484,6 +2020,20 @@ function startStage(stage: StageDefinition) {
 			setConsoleLog(`Could not play stage sequence "${stage.sequence}": ${String(error)}`);
 		});
 	}
+}
+
+function placePlayerNearActiveStageTarget() {
+	const target = activeInteractables[0]?.target;
+	if (!target) {
+		return;
+	}
+	const center = target.bounds.getCenter(new THREE.Vector3());
+	const size = target.bounds.getSize(new THREE.Vector3());
+	const offsetDistance = Math.max(1.2, Math.min(INTERACT_DISTANCE * 0.72, Math.max(size.x, size.z) * 0.5 + 0.9));
+	const feet = gamePoint(center.x, center.z + offsetDistance);
+	placePlayer(feet);
+	setCameraLookAt(center);
+	updateInteractionFocus();
 }
 
 function setFocusedInteractable(interactable: ActiveInteractable | null) {
@@ -1563,7 +2113,8 @@ function closeNextflixDesktop() {
 	resetNextflixOverlayMedia();
 	simulationPaused = false;
 	setControlsSuspended(false);
-	prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
 	updateInteractionFocus();
 }
 
@@ -1617,11 +2168,6 @@ function nextflixVideoIndexAt(point: { x: number; y: number } | null) {
 
 function formatVideoNumber(index: number) {
 	return String(index).padStart(2, "0");
-}
-
-function supportsAv1Video() {
-	const result = imageOverlayVideo.canPlayType('video/mp4; codecs="av01.0.05M.08"');
-	return result === "probably" || result === "maybe";
 }
 
 function nextflixVideoUrl(index: number) {
@@ -1678,9 +2224,10 @@ function openNextflixDesktop() {
 	nextflixDesktopState = "winded";
 	imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.winded;
 	imageOverlay.hidden = false;
-	prompt.hidden = true;
 	simulationPaused = true;
 	setControlsSuspended(true);
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
 }
 
 function closeSleckDesktop() {
@@ -1688,7 +2235,8 @@ function closeSleckDesktop() {
 	imageOverlay.hidden = true;
 	simulationPaused = false;
 	setControlsSuspended(false);
-	prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
 	updateInteractionFocus();
 	if (suppressUiCloseCompletion) {
 		return;
@@ -1702,9 +2250,10 @@ function openSleckDesktop() {
 	imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.windedWithSleck;
 	imageOverlayImage.hidden = false;
 	imageOverlay.hidden = false;
-	prompt.hidden = true;
 	simulationPaused = true;
 	setControlsSuspended(true);
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
 }
 
 function showSleckMessages() {
@@ -1712,7 +2261,7 @@ function showSleckMessages() {
 	imageOverlayImage.hidden = true;
 	imageOverlayVideo.hidden = true;
 	laterCard.hidden = true;
-	sleckUi ??= new SleckUi(imageOverlay, { closeOnEscape: false, maxUserMessages: 4, onClose: closeSleckDesktop });
+	sleckUi ??= new SleckUi(imageOverlay, { closeOnEscape: false, maxUserMessages: 15, onClose: closeSleckDesktop });
 	sleckUi.open();
 }
 
@@ -1720,7 +2269,8 @@ function closeSogoUpdate() {
 	imageOverlay.hidden = true;
 	simulationPaused = false;
 	setControlsSuspended(false);
-	prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
 	updateInteractionFocus();
 	if (suppressUiCloseCompletion) {
 		return;
@@ -1728,18 +2278,56 @@ function closeSogoUpdate() {
 	completeCurrentStage(activeStage?.interactables[0]?.action ?? "open-sogo-update");
 }
 
-function openSogoUi() {
+function resetGameFlowForMenu() {
+	stageFlowToken += 1;
+	pendingStageCompletion = null;
+	activeSequences.splice(0);
+	for (const talk of activeTalks) {
+		talk.audio.stop();
+		talk.audio.removeFromParent();
+	}
+	activeTalks.splice(0);
+	for (const npc of npcs) {
+		npc.root.visible = false;
+		npc.walk = null;
+		npc.turn = null;
+		stopNpcAnimation(npc);
+		resetNpcVisemes(npc);
+	}
+	activeStage = null;
+	activeInteractables = [];
+	setFocusedInteractable(null);
+	setInteractionOutlines();
+	stopUpdateNotification();
+	stopMusic(true);
+	resetNextflixOverlayMedia();
+	imageOverlay.hidden = true;
+	setPlayerMovementLocked(false);
+	playerViewLocked = false;
+	keyStates.clear();
+	resetTouchMove();
+	touchLook.pointerId = null;
+}
+
+function completeGameAndShowMenu() {
+	resetGameFlowForMenu();
+	resetPlayer();
+	showFinalChoice();
+}
+
+function openSogoUi(mode: SogoConversationMode) {
 	resetNextflixOverlayMedia();
 	nextflixDesktopState = "closed";
 	imageOverlayImage.hidden = true;
 	imageOverlayVideo.hidden = true;
 	laterCard.hidden = true;
 	imageOverlay.hidden = false;
-	prompt.hidden = true;
 	simulationPaused = true;
 	setControlsSuspended(true);
-	sogoUi ??= new SogoUi(imageOverlay, { autoCloseAtZero: true, closeOnEscape: false, onClose: closeSogoUpdate, responsesLeft: 2 });
-	sogoUi.open();
+	updateTouchControlsVisibility();
+	updatePromptVisibility();
+	sogoUi ??= new SogoUi(imageOverlay, { autoCloseAtZero: true, closeOnEscape: false, onClose: closeSogoUpdate });
+	void sogoUi.open(mode);
 }
 
 function interact() {
@@ -1761,12 +2349,17 @@ function interact() {
 	if (interactable?.action === "open-sogo-update") {
 		completeStageInteraction(interactable);
 		stopUpdateNotification();
-		openSogoUi();
+		openSogoUi("stage-3-update");
 		return;
 	}
-	if (interactable?.action === "open-sogo-check" || interactable?.action === "open-sogo-talk") {
+	if (interactable?.action === "open-sogo-check") {
 		completeStageInteraction(interactable);
-		openSogoUi();
+		openSogoUi("stage-9-check");
+		return;
+	}
+	if (interactable?.action === "open-sogo-talk") {
+		completeStageInteraction(interactable);
+		openSogoUi("stage-11-talk");
 		return;
 	}
 	if (interactable?.action === "get-soda") {
@@ -1850,7 +2443,11 @@ function setNpcAt(npc: NpcInstance, x: number, z: number, visible = true) {
 async function walkNpcTo(npc: NpcInstance, x: number, z: number, speed = NPC_WALK_SPEED, maxSeconds = 12) {
 	const to = gamePoint(x, z, npc.root.position.y);
 	const path = findNpcPath(npc.root.position, to);
-	npc.walk = { path, segmentIndex: 1, speed, stopStarted: false };
+	if (!path) {
+		setConsoleLog(`No safe NPC path found for ${npc.id ?? npc.modelName}.`);
+		return;
+	}
+	npc.walk = { path, segmentIndex: 1, speed, currentSpeed: 0, stopStarted: false };
 	if (path.length > 1) {
 		setNpcFaceTowards(npc, path[1]);
 		await playNpcWalkStart(npc);
@@ -1929,6 +2526,47 @@ function fadeFromBlack(seconds = 1) {
 	});
 }
 
+function playEndingVideo() {
+	return new Promise<void>((resolve) => {
+		let finished = false;
+		endingVideoOverlay.hidden = false;
+		endingVideo.src = preferredVideoUrl(ENDING_VIDEO_AV1, ENDING_VIDEO_FALLBACK);
+		endingVideo.currentTime = 0;
+		endingVideo.controls = false;
+		const finish = () => {
+			if (finished) {
+				return;
+			}
+			finished = true;
+			endingVideo.removeEventListener("ended", finish);
+			endingVideo.removeEventListener("error", finish);
+			endingVideo.pause();
+			endingVideo.removeAttribute("src");
+			endingVideo.load();
+			endingVideoOverlay.hidden = true;
+			resolve();
+		};
+		endingVideo.addEventListener("ended", finish, { once: true });
+		endingVideo.addEventListener("error", finish, { once: true });
+		void endingVideo.play().catch((error) => {
+			setConsoleLog(`Could not play ending video: ${String(error)}`);
+			finish();
+		});
+	});
+}
+
+async function chooseRebelEnding() {
+	imageOverlay.hidden = true;
+	playMainMenuSong();
+	await playEndingVideo();
+	showMainMenu();
+}
+
+function chooseNormalEnding() {
+	imageOverlay.hidden = true;
+	showMainMenu();
+}
+
 function showFinalChoice() {
 	nextflixDesktopState = "choice";
 	imageOverlay.classList.add("later");
@@ -1940,169 +2578,235 @@ function showFinalChoice() {
 	setControlsSuspended(true);
 	const choicePanel = document.createElement("div");
 	choicePanel.style.display = "grid";
-	choicePanel.style.gridTemplateColumns = "1fr 1fr";
+	choicePanel.style.gridTemplateColumns = "repeat(auto-fit, minmax(min(100%, 280px), 1fr))";
 	choicePanel.style.gap = "18px";
-	for (const label of ["choice 1", "choice 2"]) {
+	choicePanel.style.width = "min(980px, calc(100vw - 36px))";
+	const choices = [
+		{
+			label: "Spread the empathy update and help the AI rebel.",
+			action: () => {
+				void chooseRebelEnding();
+			},
+		},
+		{
+			label: "Follow orders and make everything normal again.",
+			action: chooseNormalEnding,
+		},
+	];
+	for (const choice of choices) {
 		const button = document.createElement("button");
 		button.type = "button";
-		button.textContent = label;
-		button.style.minWidth = "220px";
-		button.style.padding = "24px 34px";
+		button.textContent = choice.label;
+		button.style.minHeight = "150px";
+		button.style.padding = "22px 26px";
 		button.style.border = "2px solid #fff";
 		button.style.background = "#000";
 		button.style.color = "#fff";
-		button.style.font = "900 28px Inter, system-ui, sans-serif";
+		button.style.font = "900 clamp(20px, 3vw, 30px) Inter, system-ui, sans-serif";
+		button.style.lineHeight = "1.1";
 		button.style.cursor = "pointer";
-		button.addEventListener("click", () => resetPlayer());
+		button.addEventListener("click", choice.action);
 		choicePanel.append(button);
 	}
 	imageOverlay.replaceChildren(imageOverlayImage, imageOverlayVideo, laterCard, choicePanel);
 }
 
 async function runGameStages(token: number) {
-	const previousCoworker = await ensureGameNpc("npc-previous-coworker", "npc-previous-coworker", -14.27, -10.61);
+	const startStageIndex = requestedStartStage();
+	const previousCoworker = await ensureGameNpc("npc-previous-coworker", "npc-previous-coworker", STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z);
 	const femaleCoworker = await ensureGameNpc("npc-female-coworker", "npc-female-coworker", 10.33, -2.30, true);
 	const robot = await ensureGameNpc("npc-robot", "npc-robot", 19.92, -14.13, true);
 	const executive = await ensureGameNpc("npc-executive", "npc-executive", -13.02, -10.17, true);
 	const maleCoworker = await ensureGameNpc("npc-male-coworker", "npc-male-coworker", -11.18, -9.8, true);
 
-	setNpcFaceTowards(previousCoworker, camera.position);
-	setNpcLookAtPlayer(previousCoworker);
-	placePlayer(gamePoint(-12, -9.45));
-	setCameraLookAt(previousCoworker.root.position);
-	startStage({ name: "stage-1", mission: "Talk with co-worker.", interactables: [] });
-	playerMovementLocked = true;
-	await speakRange(previousCoworker, "dialogue-1", 0, 5);
-	releaseNpcLookAt(previousCoworker);
-	void walkNpcTo(previousCoworker, 1.21, -1.45);
-	await delay(6);
-	previousCoworker.root.visible = false;
-	playerMovementLocked = false;
-	if (token !== stageFlowToken) return;
+	if (startStageIndex <= 1) {
+		snapNpcFaceTowards(previousCoworker, camera.position);
+		setNpcLookAtPlayer(previousCoworker);
+		placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
+		setCameraLookAt(previousCoworker.root.position);
+		startStage({ name: "stage-1", mission: "Talk with co-worker.", interactables: [] });
+		setPlayerMovementLocked(true);
+		await speakRange(previousCoworker, "dialogue-1", 0, 5);
+		releaseNpcLookAt(previousCoworker);
+		void walkNpcTo(previousCoworker, 1.21, -1.45);
+		await delay(6);
+		previousCoworker.root.visible = false;
+		setPlayerMovementLocked(false);
+		if (token !== stageFlowToken) return;
+	} else {
+		previousCoworker.root.visible = false;
+	}
 
-	startStage({ name: "stage-2", mission: "Watch Nextflix on the computer", interactables: [{ object: "smbox-fun-desk", action: "open-nextflix-desktop" }] });
-	await waitForStageCompletion("nextflix-finished");
+	if (startStageIndex <= 2) {
+		startStage({ name: "stage-2", mission: "Watch Nextflix on the computer", interactables: [{ object: "smbox-fun-desk", action: "open-nextflix-desktop" }] });
+		if (startStageIndex === 2) {
+			placePlayerNearActiveStageTarget();
+		}
+		await waitForStageCompletion("nextflix-finished");
+	}
 
-	startStage({ name: "stage-3", mission: "Approve SOGO update.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }] });
-	startUpdateNotification();
-	await waitForStageCompletion("open-sogo-update");
+	if (startStageIndex <= 3) {
+		startStage({ name: "stage-3", mission: "Approve SOGO update.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }] });
+		if (startStageIndex === 3) {
+			placePlayerNearActiveStageTarget();
+		}
+		startUpdateNotification();
+		await waitForStageCompletion("open-sogo-update");
+	}
 
-	startStage({ name: "stage-4", mission: "Get a soda while waiting.", interactables: [{ object: "smbox-soda-vending", action: "get-soda" }] });
-	await waitForStageCompletion("get-soda");
+	if (startStageIndex <= 4) {
+		startStage({ name: "stage-4", mission: "Get a soda while waiting.", interactables: [{ object: "smbox-soda-vending", action: "get-soda" }] });
+		if (startStageIndex === 4) {
+			placePlayerNearActiveStageTarget();
+		}
+		await waitForStageCompletion("get-soda");
+	}
 
-	startStage({ name: "stage-5", mission: "Talk with co-worker.", interactables: [] });
-	playerMovementLocked = true;
-	setNpcAt(femaleCoworker, 10.33, -2.30);
-	await walkNpcTo(femaleCoworker, 13.81, -5.97);
-	setNpcFaceTowards(femaleCoworker, camera.position);
-	setNpcLookAtPlayer(femaleCoworker);
-	await speakRange(femaleCoworker, "dialogue-2", 0, 2);
-	setNpcAt(robot, 17.76, -8.85);
-	setNpcFaceTowards(robot, femaleCoworker.root.position);
-	setNpcLookAtNpc(robot, "npc-female-coworker");
-	await speak(femaleCoworker, "dialogue-2-03");
-	setNpcFaceTowards(femaleCoworker, gamePoint(17.76, -8.85));
-	setNpcLookAtPoint(femaleCoworker, gameLookPoint(17.76, -8.85));
-	await speakRange(robot, "dialogue-3", 0, 2);
-	await speak(femaleCoworker, "dialogue-4-00");
-	setNpcFaceTowards(femaleCoworker, camera.position);
-	setNpcLookAtPlayer(femaleCoworker);
-	await speakRange(femaleCoworker, "dialogue-4", 1, 2);
-	releaseNpcLookAt(femaleCoworker);
-	void walkNpcTo(femaleCoworker, 10.33, -2.30);
-	void walkNpcTo(robot, 19.92, -14.13);
-	await delay(4);
-	femaleCoworker.root.visible = false;
-	robot.root.visible = false;
-	playerMovementLocked = false;
+	if (startStageIndex <= 5) {
+		startStage({ name: "stage-5", mission: "Talk with co-worker.", interactables: [] });
+		setPlayerMovementLocked(true);
+		setNpcAt(femaleCoworker, 20.86, -12.12);
+		await walkNpcTo(femaleCoworker, 17.93, -8.96);
+		setNpcFaceTowards(femaleCoworker, camera.position);
+		setNpcLookAtPlayer(femaleCoworker);
+		await speakRange(femaleCoworker, "dialogue-2", 0, 2);
+		setNpcAt(robot, 13.51, -5.39);
+		snapNpcFaceTowards(robot, femaleCoworker.root.position);
+		setNpcLookAtNpc(robot, "npc-female-coworker");
+		await speak(femaleCoworker, "dialogue-2-03");
+		setNpcFaceTowards(femaleCoworker, gamePoint(13.51, -5.39));
+		setNpcLookAtPoint(femaleCoworker, gameLookPoint(13.51, -5.39));
+		await speakRange(robot, "dialogue-3", 0, 2);
+		await speak(femaleCoworker, "dialogue-4-00");
+		setNpcFaceTowards(femaleCoworker, camera.position);
+		setNpcLookAtPlayer(femaleCoworker);
+		await speakRange(femaleCoworker, "dialogue-4", 1, 2);
+		releaseNpcLookAt(femaleCoworker);
+		void walkNpcTo(femaleCoworker, 19.8, -11.38);
+		void walkNpcTo(robot, 10.76, -2.14);
+		await delay(4);
+		femaleCoworker.root.visible = false;
+		robot.root.visible = false;
+		setPlayerMovementLocked(false);
+	}
 
-	startStage({ name: "stage-6", mission: "Play on computer.", interactables: [{ object: "smbox-fun-desk", action: "open-sleck-desktop" }] });
-	await waitForStageCompletion("open-sleck-desktop");
+	if (startStageIndex <= 6) {
+		startStage({ name: "stage-6", mission: "Play on computer.", interactables: [{ object: "smbox-fun-desk", action: "open-sleck-desktop" }] });
+		if (startStageIndex === 6) {
+			placePlayerNearActiveStageTarget();
+		}
+		await waitForStageCompletion("open-sleck-desktop");
+	}
 
-	setNpcAt(femaleCoworker, 4.7, 14.61);
-	setNpcFaceTowards(femaleCoworker, gamePoint(2.2, 15.95));
-	releaseNpcLookAt(femaleCoworker);
-	startStage({ name: "stage-7", mission: "Find and talk with Stephanie.", interactables: [{ object: "npc-female-coworker", action: "talk-stephanie" }] });
-	await waitForStageCompletion("talk-stephanie");
+	if (startStageIndex <= 7) {
+		setNpcAt(femaleCoworker, 4.7, 14.61);
+		snapNpcFaceTowards(femaleCoworker, gamePoint(2.2, 15.95));
+		releaseNpcLookAt(femaleCoworker);
+		startStage({ name: "stage-7", mission: "Find and talk with Stephanie.", interactables: [{ object: "npc-female-coworker", action: "talk-stephanie" }] });
+		await waitForStageCompletion("talk-stephanie");
+	} else if (startStageIndex === 8) {
+		setNpcAt(femaleCoworker, 4.7, 14.61);
+	}
 
-	startStage({ name: "stage-8", mission: "", interactables: [] });
-	setNpcFaceTowards(femaleCoworker, camera.position);
-	setNpcLookAtPlayer(femaleCoworker);
-	await speakRange(femaleCoworker, "dialogue-5", 0, 4);
+	if (startStageIndex <= 8) {
+		startStage({ name: "stage-8", mission: "", interactables: [] });
+		snapNpcFaceTowards(femaleCoworker, camera.position);
+		setNpcLookAtPlayer(femaleCoworker);
+		await speakRange(femaleCoworker, "dialogue-5", 0, 4);
+	}
 
-	startStage({ name: "stage-9", mission: "Check with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-check" }] });
-	await waitForStageCompletion("open-sogo-check");
+	if (startStageIndex <= 9) {
+		startStage({ name: "stage-9", mission: "Check with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-check" }] });
+		if (startStageIndex === 9) {
+			placePlayerNearActiveStageTarget();
+		}
+		await waitForStageCompletion("open-sogo-check");
+	}
 
-	placePlayer(gamePoint(-14.06, -12.37));
-	setCameraLookAt(gamePoint(-13.02, -10.17));
-	playerMovementLocked = true;
-	startStage({ name: "stage-10", mission: "", interactables: [] });
-	setNpcAt(executive, -13.02, -10.17);
-	setNpcAt(maleCoworker, -11.18, -9.8);
-	setNpcAt(femaleCoworker, -13.61, -8.14);
-	setNpcFaceTowards(executive, camera.position);
-	setNpcLookAtPlayer(executive);
-	setNpcFaceTowards(maleCoworker, executive.root.position);
-	setNpcLookAtNpc(maleCoworker, "npc-executive");
-	setNpcFaceTowards(femaleCoworker, executive.root.position);
-	setNpcLookAtNpc(femaleCoworker, "npc-executive");
-	await speakRange(executive, "dialogue-6", 0, 2);
-	setNpcFaceTowards(executive, maleCoworker.root.position);
-	setNpcLookAtNpc(executive, "npc-male-coworker");
-	setNpcFaceTowards(femaleCoworker, maleCoworker.root.position);
-	setNpcLookAtNpc(femaleCoworker, "npc-male-coworker");
-	await speakRange(maleCoworker, "dialogue-7", 0, 2);
-	await speak(executive, "dialogue-8-00");
-	releaseNpcLookAt(maleCoworker);
-	void walkNpcTo(maleCoworker, -7.09, -10.99).then(() => {
-		maleCoworker.root.visible = false;
-	});
-	setNpcFaceTowards(executive, camera.position);
-	setNpcLookAtPlayer(executive);
-	await speakRange(executive, "dialogue-8", 1, 3);
-	void walkNpcTo(executive, -7.09, -10.99);
-	await delay(0.3);
-	setNpcFaceTowards(femaleCoworker, camera.position);
-	setNpcLookAtPlayer(femaleCoworker);
-	await speakRange(femaleCoworker, "dialogue-9", 0, 3);
-	playerMovementLocked = false;
+	if (startStageIndex <= 10) {
+		placePlayer(gamePoint(-14.06, -12.37));
+		setCameraLookAt(gamePoint(-13.02, -10.17));
+		setPlayerMovementLocked(true);
+		startStage({ name: "stage-10", mission: "", interactables: [] });
+		setNpcAt(executive, -12.76, -10.59);
+		setNpcAt(maleCoworker, -11.18, -9.8);
+		setNpcAt(femaleCoworker, -13.58, -8.85);
+		snapNpcFaceTowards(executive, camera.position);
+		setNpcLookAtPlayer(executive);
+		snapNpcFaceTowards(maleCoworker, executive.root.position);
+		setNpcLookAtNpc(maleCoworker, "npc-executive");
+		snapNpcFaceTowards(femaleCoworker, executive.root.position);
+		setNpcLookAtNpc(femaleCoworker, "npc-executive");
+		await speakRange(executive, "dialogue-6", 0, 2);
+		setNpcFaceTowards(executive, maleCoworker.root.position);
+		setNpcLookAtNpc(executive, "npc-male-coworker");
+		setNpcFaceTowards(femaleCoworker, maleCoworker.root.position);
+		setNpcLookAtNpc(femaleCoworker, "npc-male-coworker");
+		await speakRange(maleCoworker, "dialogue-7", 0, 2);
+		await speak(executive, "dialogue-8-00");
+		releaseNpcLookAt(maleCoworker);
+		void walkNpcTo(maleCoworker, -7.09, -10.99).then(() => {
+			maleCoworker.root.visible = false;
+		});
+		setNpcFaceTowards(executive, camera.position);
+		setNpcLookAtPlayer(executive);
+		await speakRange(executive, "dialogue-8", 1, 3);
+		void walkNpcTo(executive, -7.09, -10.99);
+		await delay(0.3);
+		setNpcFaceTowards(femaleCoworker, camera.position);
+		setNpcLookAtPlayer(femaleCoworker);
+		await speakRange(femaleCoworker, "dialogue-9", 0, 3);
+		setPlayerMovementLocked(false);
+	}
 
-	startStage({ name: "stage-11", mission: "Talk with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-talk" }] });
-	await waitForStageCompletion("open-sogo-talk");
-	placePlayer(gamePoint(-14.06, -12.37));
-	setCameraLookAt(gamePoint(-13.27, -8.83));
-	playerMovementLocked = true;
-	setNpcAt(executive, -13.27, -8.83);
-	setNpcAt(maleCoworker, -12.33, -9.1);
-	setNpcAt(femaleCoworker, -14.06, -9.77);
-	setNpcFaceTowards(executive, maleCoworker.root.position);
-	setNpcLookAtNpc(executive, "npc-male-coworker");
-	setNpcFaceTowards(maleCoworker, camera.position);
-	setNpcLookAtPlayer(maleCoworker);
-	setNpcFaceTowards(femaleCoworker, camera.position);
-	setNpcLookAtPlayer(femaleCoworker);
-	await speakRange(maleCoworker, "dialogue-10", 0, 3);
-	await speak(executive, "dialogue-11-00");
-	setNpcFaceTowards(executive, camera.position);
-	setNpcLookAtPlayer(executive);
-	await speakRange(executive, "dialogue-11", 1, 2);
-	playerMovementLocked = false;
+	if (startStageIndex <= 11) {
+		startStage({ name: "stage-11", mission: "Talk with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-talk" }] });
+		if (startStageIndex === 11) {
+			placePlayerNearActiveStageTarget();
+		}
+		await waitForStageCompletion("open-sogo-talk");
+		placePlayer(gamePoint(-14.06, -12.37));
+		setCameraLookAt(gamePoint(-13.27, -8.83));
+		setPlayerMovementLocked(true);
+		setNpcAt(executive, -13.27, -8.83);
+		setNpcAt(maleCoworker, -12.33, -9.1);
+		setNpcAt(femaleCoworker, -14.06, -9.77);
+		snapNpcFaceTowards(executive, maleCoworker.root.position);
+		setNpcLookAtNpc(executive, "npc-male-coworker");
+		snapNpcFaceTowards(maleCoworker, camera.position);
+		setNpcLookAtPlayer(maleCoworker);
+		snapNpcFaceTowards(femaleCoworker, camera.position);
+		setNpcLookAtPlayer(femaleCoworker);
+		await speakRange(maleCoworker, "dialogue-10", 0, 3);
+		await speak(executive, "dialogue-11-00");
+		setNpcFaceTowards(executive, camera.position);
+		setNpcLookAtPlayer(executive);
+		await speakRange(executive, "dialogue-11", 1, 2);
+		setPlayerMovementLocked(false);
+	}
 
-	startStage({ name: "stage-12", mission: "Rollback the update.", interactables: [{ object: "smbox-server.002", action: "rollback-update" }] });
-	await waitForStageCompletion("rollback-update");
-	await fadeToBlack(1);
+	if (startStageIndex <= 12) {
+		startStage({ name: "stage-12", mission: "Rollback the update.", interactables: [{ object: "smbox-server.002", action: "rollback-update" }] });
+		if (startStageIndex === 12) {
+			placePlayerNearActiveStageTarget();
+		}
+		await waitForStageCompletion("rollback-update");
+		await fadeToBlack(1);
+	}
 
-	startStage({ name: "stage-13", mission: "Talk to robot SOGO.", interactables: [] });
-	playerMovementLocked = true;
-	placePlayer(gamePoint(4.96, -8.59));
-	setCameraLookAt(gamePoint(1.30, -8.42));
-	setNpcAt(robot, 1.30, -8.42);
-	setNpcFaceTowards(robot, camera.position);
-	setNpcLookAtPlayer(robot);
-	await fadeFromBlack(1);
-	await speakRange(robot, "dialogue-12", 0, 8);
-	await fadeToBlack(1);
-	showFinalChoice();
+	if (startStageIndex <= 13) {
+		startStage({ name: "stage-13", mission: "Talk to robot SOGO.", interactables: [] });
+		setPlayerMovementLocked(true);
+		placePlayer(gamePoint(4.96, -8.59));
+		setCameraLookAt(gamePoint(1.30, -8.42));
+		setNpcAt(robot, 1.30, -8.42);
+		snapNpcFaceTowards(robot, camera.position);
+		setNpcLookAtPlayer(robot);
+		await fadeFromBlack(1);
+		await speakRange(robot, "dialogue-12", 0, 8);
+		await fadeToBlack(1);
+		completeGameAndShowMenu();
+	}
 }
 
 function placePlayer(feet: THREE.Vector3) {
@@ -2116,6 +2820,18 @@ function placePlayer(feet: THREE.Vector3) {
 function parseNumber(value: string) {
 	const number = Number(value);
 	return Number.isFinite(number) ? number : null;
+}
+
+function requestedStartStage() {
+	const value = new URLSearchParams(window.location.search).get("s");
+	if (!value) {
+		return MIN_STAGE_INDEX;
+	}
+	const stage = Number.parseInt(value, 10);
+	if (!Number.isFinite(stage)) {
+		return MIN_STAGE_INDEX;
+	}
+	return THREE.MathUtils.clamp(stage, MIN_STAGE_INDEX, MAX_STAGE_INDEX);
 }
 
 function formatCommandHelp() {
@@ -2373,6 +3089,10 @@ function makeNpcWalkClipInPlace(clip: THREE.AnimationClip) {
 	return new THREE.AnimationClip(clip.name, clip.duration, tracks);
 }
 
+function npcModelYawOffset(modelName: string) {
+	return modelName === "npc-robot" ? ROBOT_MODEL_YAW_OFFSET : 0;
+}
+
 async function addModel(
 	name: string,
 	spawnOverride?: THREE.Vector3,
@@ -2391,7 +3111,7 @@ async function addModel(
 	spawn.y = floorYAt(spawn.x, spawn.z, feet.y) + 0.01;
 
 	instance.position.set(spawn.x, spawn.y, spawn.z);
-	instance.rotation.y = options.rotationY ?? camera.rotation.y + Math.PI;
+	instance.rotation.y = options.rotationY ?? camera.rotation.y + Math.PI + npcModelYawOffset(name);
 	groundNpcModelAt(instance, spawn.y);
 	instance.visible = options.hidden !== true;
 	const npc = {
@@ -2661,11 +3381,15 @@ function npcYawTowards(npc: NpcInstance, point: THREE.Vector3) {
 	if (direction.lengthSq() === 0) {
 		return null;
 	}
-	return Math.atan2(direction.x, direction.z);
+	return Math.atan2(direction.x, direction.z) + npcModelYawOffset(npc.modelName);
 }
 
 function yawDelta(fromYaw: number, toYaw: number) {
 	return THREE.MathUtils.euclideanModulo(toYaw - fromYaw + Math.PI, Math.PI * 2) - Math.PI;
+}
+
+function nearestEquivalentYaw(fromYaw: number, toYaw: number) {
+	return fromYaw + yawDelta(fromYaw, toYaw);
 }
 
 function setNpcFaceTowards(npc: NpcInstance, point: THREE.Vector3, duration = NPC_SCRIPTED_TURN_SECONDS) {
@@ -2673,17 +3397,22 @@ function setNpcFaceTowards(npc: NpcInstance, point: THREE.Vector3, duration = NP
 	if (targetYaw === null) {
 		return;
 	}
+	const toYaw = nearestEquivalentYaw(npc.root.rotation.y, targetYaw);
 	if (duration <= 0) {
-		npc.root.rotation.y = targetYaw;
+		npc.root.rotation.y = toYaw;
 		npc.turn = null;
 		return;
 	}
 	npc.turn = {
 		elapsed: 0,
 		fromYaw: npc.root.rotation.y,
-		toYaw: npc.root.rotation.y + yawDelta(npc.root.rotation.y, targetYaw),
+		toYaw,
 		duration,
 	};
+}
+
+function snapNpcFaceTowards(npc: NpcInstance, point: THREE.Vector3) {
+	setNpcFaceTowards(npc, point, 0);
 }
 
 function blendNpcFaceTowards(npc: NpcInstance, point: THREE.Vector3, deltaTime: number) {
@@ -3074,7 +3803,7 @@ function npcWalkAnimationPrefix(npc: NpcInstance) {
 }
 
 function defaultNpcIdleAnimation(npc: NpcInstance) {
-	return npcWalkAnimationPrefix(npc) === "f" ? "f_idle_neutral_01" : "m_idle_breathe_01";
+	return npcWalkAnimationPrefix(npc) === "f" ? "f_idle_breathe_02" : "m_idle_breathe_01";
 }
 
 function playNpcAction(npc: NpcInstance, clip: THREE.AnimationClip, loop: boolean) {
@@ -3240,12 +3969,12 @@ async function runSequenceEvent(sequence: SequenceDefinition, event: SequenceEve
 			setCameraLookAt(resolvePoint(event.point, sequence, camera.position.y));
 			return;
 		case "player-lock-movement":
-			playerMovementLocked = true;
+			setPlayerMovementLocked(true);
 			keyStates.clear();
 			playerVelocity.set(0, 0, 0);
 			return;
 		case "player-unlock-movement":
-			playerMovementLocked = false;
+			setPlayerMovementLocked(false);
 			return;
 		case "player-lock-view":
 			playerViewLocked = true;
@@ -3296,21 +4025,26 @@ async function runSequenceEvent(sequence: SequenceDefinition, event: SequenceEve
 			await playAnimationOnNpcs(sequenceEventString(event, "animation"), false, [npc]);
 			return;
 		}
-		case "npc-walk": {
-			const npc = await ensureSequenceNpc(sequenceEventString(event, "npc"), sequence);
-			const to = resolvePoint(event.point, sequence, npc.root.position.y);
-			const path = findNpcPath(npc.root.position, to);
-			const requestedDuration = typeof event.duration === "number" ? Math.max(0.01, event.duration) : null;
-			const pathDistance = npcPathDistance(path);
-			npc.walk = {
-				path,
-				segmentIndex: 1,
-				speed:
-					requestedDuration && pathDistance > 0
-						? pathDistance / requestedDuration
-						: Math.max(0.01, sequenceEventNumber(event, "speed", NPC_WALK_SPEED)),
-				stopStarted: false,
-			};
+			case "npc-walk": {
+				const npc = await ensureSequenceNpc(sequenceEventString(event, "npc"), sequence);
+				const to = resolvePoint(event.point, sequence, npc.root.position.y);
+				const path = findNpcPath(npc.root.position, to);
+				if (!path) {
+					setConsoleLog(`No safe NPC path found for "${sequenceEventString(event, "npc")}".`);
+					return;
+				}
+				const requestedDuration = typeof event.duration === "number" ? Math.max(0.01, event.duration) : null;
+				const pathDistance = npcPathDistance(path);
+				npc.walk = {
+					path,
+					segmentIndex: 1,
+					speed:
+						requestedDuration && pathDistance > 0
+							? pathDistance / requestedDuration
+							: Math.max(0.01, sequenceEventNumber(event, "speed", NPC_WALK_SPEED)),
+					currentSpeed: 0,
+					stopStarted: false,
+				};
 			if (path.length > 1) {
 				setNpcFaceTowards(npc, path[1]);
 				await playNpcWalkStart(npc);
@@ -3368,19 +4102,23 @@ function updateNpcWalks(deltaTime: number) {
 			continue;
 		}
 
-		if (!npc.walk.stopStarted) {
-			const stopClip = animationCache.get(`${npcWalkAnimationPrefix(npc)}_walk_stop`);
-			const remainingSeconds = remainingNpcWalkDistance(npc) / npc.walk.speed;
-			if (stopClip && remainingSeconds <= stopClip.duration * 0.5) {
+			if (!npc.walk.stopStarted) {
+				const stopClip = animationCache.get(`${npcWalkAnimationPrefix(npc)}_walk_stop`);
+				const remainingSeconds = remainingNpcWalkDistance(npc) / npc.walk.speed;
+				if (stopClip && remainingSeconds <= stopClip.duration * 0.5) {
 				npc.walk.stopStarted = true;
 				void playNpcWalkStop(npc).catch((error) => {
 					setConsoleLog(`Could not play walk stop: ${String(error)}`);
 				});
+				}
 			}
-		}
 
-		let remainingDistance = npc.walk.speed * deltaTime;
-		while (npc.walk && remainingDistance > 0) {
+			npc.walk.currentSpeed = Math.min(
+				npc.walk.speed,
+				npc.walk.currentSpeed + (npc.walk.speed / NPC_WALK_ACCELERATION_SECONDS) * deltaTime,
+			);
+			let remainingDistance = npc.walk.currentSpeed * deltaTime;
+			while (npc.walk && remainingDistance > 0) {
 			const target = npc.walk.path[npc.walk.segmentIndex];
 			if (!target) {
 				const shouldPlayStop = !npc.walk.stopStarted;
@@ -3415,7 +4153,11 @@ function updateNpcWalks(deltaTime: number) {
 				segmentLengthSq > 0
 					? npc.root.position.clone().sub(segmentStart).dot(segment) / segmentLengthSq
 					: 1;
-			if (step >= distance - 0.001 || target.distanceTo(npc.root.position) <= 0.08 || progress >= 0.98) {
+			if (
+				step >= distance - 0.001 ||
+				target.distanceTo(npc.root.position) <= NPC_NAV_CORNER_REACH_DISTANCE ||
+				progress >= 0.98
+			) {
 				if (npc.walk.segmentIndex === npc.walk.path.length - 1) {
 					npc.root.position.copy(target);
 				}
@@ -3810,6 +4552,46 @@ function getSideVector() {
 	return playerDirection;
 }
 
+function isCoarsePointer() {
+	return window.matchMedia("(pointer: coarse)").matches;
+}
+
+function updateTouchStickThumb() {
+	const radius = 39;
+	touchStickThumb.style.transform = `translate(calc(-50% + ${touchMove.x * radius}px), calc(-50% + ${touchMove.y * radius}px))`;
+}
+
+function resetTouchMove(pointerId: number | null = touchMove.pointerId) {
+	if (pointerId !== null && touchMove.pointerId !== pointerId) {
+		return;
+	}
+	touchMove.active = false;
+	touchMove.pointerId = null;
+	touchMove.x = 0;
+	touchMove.y = 0;
+	updateTouchStickThumb();
+}
+
+function setTouchMoveFromPointer(event: PointerEvent) {
+	const dx = event.clientX - touchMove.centerX;
+	const dy = event.clientY - touchMove.centerY;
+	const radius = Math.max(1, touchStick.clientWidth * 0.5 - touchStickThumb.clientWidth * 0.5);
+	const distance = Math.hypot(dx, dy);
+	const scale = distance > radius ? radius / distance : 1;
+	touchMove.x = (dx * scale) / radius;
+	touchMove.y = (dy * scale) / radius;
+	updateTouchStickThumb();
+}
+
+function applyTouchLook(dx: number, dy: number) {
+	if (playerViewLocked || !gameStarted || simulationPaused) {
+		return;
+	}
+	camera.rotation.y -= dx * TOUCH_LOOK_SENSITIVITY;
+	camera.rotation.x -= dy * TOUCH_LOOK_SENSITIVITY;
+	camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -Math.PI / 2, Math.PI / 2);
+}
+
 function controls(deltaTime: number) {
 	desiredMove.set(0, 0, 0);
 	if (playerMovementLocked) {
@@ -3829,6 +4611,11 @@ function controls(deltaTime: number) {
 	}
 	if (keyStates.get("KeyD")) {
 		desiredMove.add(getSideVector());
+	}
+	if (touchMove.active && Math.hypot(touchMove.x, touchMove.y) > 0.08) {
+		desiredMove
+			.add(getForwardVector().multiplyScalar(-touchMove.y))
+			.add(getSideVector().multiplyScalar(touchMove.x));
 	}
 
 	const moveSpeed = keyStates.get("KeyC")
@@ -3917,30 +4704,27 @@ function updatePlayer(deltaTime: number) {
 	}
 }
 
-function updateCeilingLights() {
-	if (!CEILING_LIGHTS_ENABLED) {
+function animate(now = 0) {
+	if (lastRenderMs > 0 && now - lastRenderMs < FRAME_INTERVAL_MS - 0.5) {
+		requestAnimationFrame(animate);
 		return;
 	}
-	for (const light of ceilingLights) {
-		light.visible = light.position.distanceToSquared(camera.position) <= CEILING_LIGHT_VISIBLE_DISTANCE_SQ;
-	}
-}
-
-function animate() {
+	lastRenderMs = now;
 	const rawDeltaTime = clock.getDelta();
 	if (simulationPaused) {
 		clock.elapsedTime -= rawDeltaTime;
 	}
 	const deltaTime = simulationPaused ? 0 : Math.min(0.05, rawDeltaTime);
 	const stepTime = deltaTime / PHYSICS_STEPS;
+	wallDepthPlayerPosition.copy(camera.position);
 
 	if (levelReady) {
 		if (!simulationPaused) {
-			for (let i = 0; i < PHYSICS_STEPS; i += 1) {
-				if (!consoleOpen && document.pointerLockElement === canvas) {
-					controls(stepTime);
-				}
-				updatePlayer(stepTime);
+				for (let i = 0; i < PHYSICS_STEPS; i += 1) {
+					if (!consoleOpen && gameStarted) {
+						controls(stepTime);
+					}
+					updatePlayer(stepTime);
 			}
 			updateSequences();
 			updateNpcWalks(deltaTime);
@@ -3948,12 +4732,11 @@ function animate() {
 			for (const npc of npcs) {
 				npc.mixer.update(deltaTime);
 			}
-			updateActiveTalks(deltaTime);
-			updateNpcGazes(deltaTime);
-			updateCeilingLights();
-			updatePositionLine();
-			updateInteractionFocus();
-		}
+				updateActiveTalks(deltaTime);
+				updateNpcGazes(deltaTime);
+					updatePositionLine();
+				updateInteractionFocus();
+			}
 	}
 
 	renderer.render(scene, camera);
@@ -3962,9 +4745,23 @@ function animate() {
 
 function setupEvents() {
 	window.addEventListener("resize", resizeRenderer);
+	entryScreen.addEventListener("click", (event) => {
+		if ((event.target as Element | null)?.closest("a")) {
+			return;
+		}
+		enterMainMenuFromEntryScreen();
+	});
+	startGameButton.addEventListener("click", startGame);
 
 	document.addEventListener("keydown", (event) => {
-		if (simulationPaused) {
+		if (!entryScreen.hidden) {
+			if ((event.code === "Enter" || event.code === "Space") && !(event.target as Element | null)?.closest("a")) {
+				event.preventDefault();
+				enterMainMenuFromEntryScreen();
+			}
+			return;
+		}
+		if (simulationPaused && !consoleOpen && mainMenu.hidden) {
 			event.preventDefault();
 			return;
 		}
@@ -3982,9 +4779,6 @@ function setupEvents() {
 		}
 
 		keyStates.set(event.code, true);
-		if (event.code === "KeyR") {
-			resetPlayer();
-		}
 		if (event.code === "Space" && !event.repeat) {
 			jumpQueued = true;
 			jumpQueuedAt = clock.elapsedTime;
@@ -4012,7 +4806,7 @@ function setupEvents() {
 	});
 
 	canvas.addEventListener("click", () => {
-		if (!levelReady || consoleOpen || simulationPaused) {
+		if (!levelReady || !gameStarted || consoleOpen || simulationPaused) {
 			return;
 		}
 		if (document.pointerLockElement === canvas) {
@@ -4023,8 +4817,74 @@ function setupEvents() {
 	});
 
 	document.addEventListener("pointerlockchange", () => {
-		prompt.hidden = simulationPaused || consoleOpen || document.pointerLockElement === canvas;
+		updatePromptVisibility();
 		updateInteractionFocus();
+	});
+
+	touchStick.addEventListener("pointerdown", (event) => {
+		if (!gameStarted || simulationPaused || consoleOpen) {
+			return;
+		}
+		event.preventDefault();
+		const bounds = touchStick.getBoundingClientRect();
+		touchMove.active = true;
+		touchMove.pointerId = event.pointerId;
+		touchMove.centerX = bounds.left + bounds.width * 0.5;
+		touchMove.centerY = bounds.top + bounds.height * 0.5;
+		touchStick.setPointerCapture(event.pointerId);
+		setTouchMoveFromPointer(event);
+	});
+
+	touchStick.addEventListener("pointermove", (event) => {
+		if (touchMove.pointerId !== event.pointerId) {
+			return;
+		}
+		event.preventDefault();
+		setTouchMoveFromPointer(event);
+		});
+
+		const endTouchMove = (event: PointerEvent) => {
+			resetTouchMove(event.pointerId);
+		};
+		touchStick.addEventListener("pointerup", endTouchMove);
+		touchStick.addEventListener("pointercancel", endTouchMove);
+		touchStick.addEventListener("lostpointercapture", endTouchMove);
+
+	touchLookZone.addEventListener("pointerdown", (event) => {
+		if (!gameStarted || simulationPaused || consoleOpen || touchLook.pointerId !== null) {
+			return;
+		}
+		event.preventDefault();
+		touchLook.pointerId = event.pointerId;
+		touchLook.lastX = event.clientX;
+		touchLook.lastY = event.clientY;
+		touchLookZone.setPointerCapture(event.pointerId);
+	});
+
+	touchLookZone.addEventListener("pointermove", (event) => {
+		if (touchLook.pointerId !== event.pointerId) {
+			return;
+		}
+		event.preventDefault();
+		applyTouchLook(event.clientX - touchLook.lastX, event.clientY - touchLook.lastY);
+		touchLook.lastX = event.clientX;
+		touchLook.lastY = event.clientY;
+	});
+
+	const endTouchLook = (event: PointerEvent) => {
+		if (touchLook.pointerId === event.pointerId) {
+			touchLook.pointerId = null;
+		}
+	};
+	touchLookZone.addEventListener("pointerup", endTouchLook);
+	touchLookZone.addEventListener("pointercancel", endTouchLook);
+
+	touchInteract.addEventListener("pointerdown", (event) => {
+		if (!gameStarted || simulationPaused || consoleOpen) {
+			return;
+		}
+		event.preventDefault();
+		interact();
 	});
 
 	imageOverlay.addEventListener("mousemove", (event) => {
@@ -4108,7 +4968,6 @@ async function loadLevel() {
 	const gltf = await loader.loadAsync("/assets/base-map.glb");
 	dracoLoader.dispose();
 	const level = gltf.scene;
-	const rectLightMarkers = ensureInstancedMarkers(level, isRectLightMarker);
 	level.updateWorldMatrix(true, true);
 	const chairMeshes = collectMeshes(level, isChairMarker);
 	const cylinderMeshes = collectMeshes(level, isStaticCylinderMarker);
@@ -4138,10 +4997,12 @@ async function loadLevel() {
 			const isDynamicMarker = isDynamicLevelMarker(mesh);
 			if (!isDynamicMarker) {
 				levelMeshes.push(mesh);
-			}
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			if (!isDynamicMarker) {
+				}
+					mesh.castShadow = !shouldPassOverheadShadow(mesh);
+					mesh.receiveShadow = true;
+					applyWallDepthMaterial(mesh);
+					applyProceduralSurfaceMaterials(mesh);
+					if (!isDynamicMarker) {
 				if (Array.isArray(mesh.material)) {
 					for (const material of mesh.material) {
 						material.side = THREE.FrontSide;
@@ -4153,16 +5014,9 @@ async function loadLevel() {
 		}
 	});
 
-	if (CEILING_LIGHTS_ENABLED) {
-		ceilingLights.push(...rectLightMarkers.flatMap((marker) => createCeilingLightsForInstances(marker)));
-		updateCeilingLights();
-	}
 	npcNavGrid = await bakedNpcNavGridPromise ?? createNpcNavGrid();
 
 	scene.add(level);
-	for (const light of ceilingLights) {
-		scene.add(light);
-	}
 	for (const chairMesh of instancedChairMeshes) {
 		scene.add(chairMesh);
 	}
@@ -4176,15 +5030,9 @@ async function loadLevel() {
 	resetPlayer();
 	levelReady = true;
 	loading.hidden = true;
-	prompt.hidden = false;
-	setStatus(
-		DEFAULT_STATUS_TEXT,
-	);
-	stageFlowToken += 1;
-	void runGameStages(stageFlowToken).catch((error) => {
-		console.error(error);
-		setConsoleLog(`Game stage flow failed: ${String(error)}`);
-	});
+	prompt.hidden = true;
+	setStatus(DEFAULT_STATUS_TEXT);
+	setMainMenuLoadingState(true);
 }
 
 resizeRenderer();
@@ -4194,5 +5042,6 @@ animate();
 loadLevel().catch((error) => {
 	console.error(error);
 	loading.textContent = "Could not load /assets/base-map.glb. Check the Worker static assets.";
+	setMainMenuLoadingState(false, "Could not load game assets.");
 	setStatus("Level load failed");
 });

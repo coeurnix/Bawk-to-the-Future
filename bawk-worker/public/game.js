@@ -36092,6 +36092,12 @@ var Octree = class _Octree {
 // client/src/sleck-ui.ts
 var SLECK_BACKGROUND_URL = "/assets/images/sleck-background.webp";
 var STEPHANIE_AVATAR_URL = "/assets/images/stephanie.webp";
+var SLECK_RECEIVED_SOUND_URL = "/assets/sounds/sleck-received.mp3";
+var SLECK_HEART_SOUND_URL = "/assets/sounds/sleck-heart.mp3";
+var INITIAL_STEPHANIE_MESSAGE = "Hey! I was just thinking about you. What are you doing?";
+var PLOT_TWIST_MESSAGE = "Uh, something really strange is going on! Can you help me figure it out? I'm in the shipping docks. Come find me! \u{1F609}";
+var DEFAULT_MAX_USER_MESSAGES = 15;
+var AUTO_PLOT_TWIST_TYPING_DELAY_MS = 3e3;
 var stylesInstalled = false;
 function installSleckStyles() {
   if (stylesInstalled) {
@@ -36125,10 +36131,11 @@ function installSleckStyles() {
 			overflow: auto;
 			display: flex;
 			flex-direction: column;
-			gap: clamp(9px, 1.0vw, 15px);
+			gap: clamp(7px, 0.75vw, 11px);
 			padding: clamp(14px, 1.8vw, 24px);
 			scrollbar-color: rgba(255, 38, 126, 0.55) rgba(8, 13, 17, 0.8);
 			scrollbar-width: thin;
+			overflow-anchor: none;
 		}
 
 		.sleck-message {
@@ -36165,6 +36172,7 @@ function installSleckStyles() {
 		}
 
 		.sleck-bubble {
+			position: relative;
 			min-width: 0;
 			border: 1px solid rgba(255, 255, 255, 0.11);
 			border-radius: 14px;
@@ -36174,12 +36182,44 @@ function installSleckStyles() {
 			font-size: clamp(12px, 1.17vw, 16px);
 			line-height: 1.34;
 			overflow-wrap: anywhere;
+			white-space: pre-line;
 			box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
 		}
 
 		.sleck-message.you .sleck-bubble {
 			background: linear-gradient(135deg, rgba(255, 38, 126, 0.95), rgba(225, 32, 112, 0.95));
 			color: #fff;
+		}
+
+		.sleck-message.hearted .sleck-bubble::after {
+			content: "\\2665";
+			position: absolute;
+			right: -8px;
+			bottom: -10px;
+			width: clamp(18px, 1.9vw, 25px);
+			height: clamp(18px, 1.9vw, 25px);
+			display: grid;
+			place-items: center;
+			border-radius: 50%;
+			background: #fff;
+			color: #ff267e;
+			font-size: clamp(12px, 1.25vw, 17px);
+			font-weight: 900;
+			box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32);
+		}
+
+		.sleck-typing {
+			font-style: italic;
+			animation: sleckTypingPulse 900ms ease-in-out infinite alternate;
+		}
+
+		@keyframes sleckTypingPulse {
+			from {
+				color: rgba(175, 181, 190, 0.62);
+			}
+			to {
+				color: rgba(255, 255, 255, 0.96);
+			}
 		}
 
 		.sleck-composer {
@@ -36221,6 +36261,31 @@ function installSleckStyles() {
 			cursor: wait;
 			opacity: 0.55;
 		}
+
+		.sleck-finished {
+			position: absolute;
+			left: 50%;
+			top: 48%;
+			transform: translate(-50%, -50%);
+			min-width: clamp(118px, 14vw, 184px);
+			border: 1px solid rgba(255, 255, 255, 0.24);
+			border-radius: 10px;
+			background: rgba(255, 38, 126, 0.94);
+			color: #fff;
+			cursor: pointer;
+			font: 800 clamp(14px, 1.35vw, 19px) / 1 Inter, ui-sans-serif, system-ui, sans-serif;
+			padding: clamp(10px, 1.1vw, 15px) clamp(18px, 2vw, 28px);
+			box-shadow: 0 16px 38px rgba(0, 0, 0, 0.36);
+		}
+
+		.sleck-finished:hover,
+		.sleck-finished:focus-visible {
+			filter: brightness(1.14);
+		}
+
+		.sleck-finished[hidden] {
+			display: none;
+		}
 	`;
   document.head.append(style);
 }
@@ -36229,21 +36294,24 @@ var SleckUi = class {
   messagesNode;
   input;
   send;
+  finished;
   closeOnEscape;
   maxUserMessages;
   onClose;
-  messages = [
-    {
-      author: "stephanie",
-      text: "Hey. I found something weird in the update notes. Can you read this before Sunders sees it?"
-    }
-  ];
+  conversation = [];
+  messages = [];
   sending = false;
+  typing = false;
+  ended = false;
+  messageId = 0;
+  openToken = 0;
+  initialTimer = 0;
+  plotTwistTimer = 0;
   userMessagesSent = 0;
   constructor(parent, options = {}) {
     installSleckStyles();
     this.closeOnEscape = options.closeOnEscape ?? true;
-    this.maxUserMessages = options.maxUserMessages ?? Infinity;
+    this.maxUserMessages = options.maxUserMessages ?? DEFAULT_MAX_USER_MESSAGES;
     this.onClose = options.onClose;
     this.root = document.createElement("div");
     this.root.className = "sleck-desktop";
@@ -36259,9 +36327,16 @@ var SleckUi = class {
     this.send.className = "sleck-send";
     this.send.type = "button";
     this.send.ariaLabel = "Send message";
-    this.root.append(this.messagesNode, this.input, this.send);
+    this.finished = document.createElement("button");
+    this.finished.className = "sleck-finished";
+    this.finished.type = "button";
+    this.finished.textContent = "Finished";
+    this.finished.hidden = true;
+    this.root.append(this.messagesNode, this.input, this.send, this.finished);
     parent.append(this.root);
-    this.send.addEventListener("click", () => this.submit());
+    this.send.addEventListener("click", () => void this.submit());
+    this.finished.addEventListener("click", () => this.close());
+    this.input.addEventListener("input", () => this.render());
     this.input.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -36272,7 +36347,7 @@ var SleckUi = class {
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        this.submit();
+        void this.submit();
         return;
       }
       event.stopPropagation();
@@ -36289,16 +36364,43 @@ var SleckUi = class {
     this.render();
   }
   open() {
+    const token = ++this.openToken;
+    window.clearTimeout(this.initialTimer);
     this.root.hidden = false;
-    this.input.focus();
-    this.scrollToBottom();
+    this.conversation = [];
+    this.messages = [];
+    this.sending = false;
+    this.typing = true;
+    this.ended = false;
+    this.userMessagesSent = 0;
+    this.input.value = "";
+    this.finished.hidden = true;
+    this.render();
+    this.initialTimer = window.setTimeout(() => {
+      if (token !== this.openToken || this.root.hidden) {
+        return;
+      }
+      this.typing = false;
+      this.conversation = [{ role: "assistant", content: INITIAL_STEPHANIE_MESSAGE }];
+      this.messages.push({
+        author: "stephanie",
+        id: this.nextMessageId(),
+        text: INITIAL_STEPHANIE_MESSAGE
+      });
+      this.render();
+      this.playSound(SLECK_RECEIVED_SOUND_URL);
+      this.input.focus();
+    }, 2e3);
   }
   close() {
+    this.openToken += 1;
+    window.clearTimeout(this.initialTimer);
+    window.clearTimeout(this.plotTwistTimer);
     this.root.hidden = true;
     this.onClose?.();
   }
-  submit() {
-    if (this.sending) {
+  async submit() {
+    if (this.sending || this.typing || this.ended) {
       return;
     }
     const text = this.input.value.trim();
@@ -36306,45 +36408,100 @@ var SleckUi = class {
       this.input.focus();
       return;
     }
-    this.messages.push({ author: "you", text });
+    const userMessageId = this.nextMessageId();
+    const requestHistory = [...this.conversation];
     this.userMessagesSent += 1;
+    this.messages.push({ author: "you", id: userMessageId, text });
     this.input.value = "";
     this.sending = true;
+    this.typing = true;
     this.render();
-    window.setTimeout(() => {
+    try {
+      const response = await fetch("/api/sleck/respond", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          history: requestHistory,
+          message: text,
+          userMessageCount: this.userMessagesSent
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`Sleck request failed with ${response.status}`);
+      }
+      const payload = await response.json();
+      this.conversation = Array.isArray(payload.history) && payload.history.length > 0 ? payload.history : [...requestHistory, { role: "user", content: text }, { role: "assistant", content: payload.message }];
+      if (payload.hearted) {
+        const lastUserMessage = this.messages.find((message) => message.id === userMessageId);
+        if (lastUserMessage) {
+          lastUserMessage.hearted = true;
+        }
+      }
+      const autoPlotTwist = payload.ended && this.userMessagesSent >= this.maxUserMessages;
+      if (autoPlotTwist) {
+        this.sending = false;
+        this.typing = true;
+        this.render();
+        this.plotTwistTimer = window.setTimeout(() => {
+          if (this.root.hidden) {
+            return;
+          }
+          this.showStephanieMessage(PLOT_TWIST_MESSAGE, true);
+          this.playSound(SLECK_RECEIVED_SOUND_URL);
+        }, AUTO_PLOT_TWIST_TYPING_DELAY_MS);
+      } else {
+        this.showStephanieMessage(payload.ended ? PLOT_TWIST_MESSAGE : payload.message, payload.ended);
+        this.playSound(payload.hearted ? SLECK_HEART_SOUND_URL : SLECK_RECEIVED_SOUND_URL);
+        if (!this.ended) {
+          this.input.focus();
+        }
+      }
+    } catch (error2) {
+      console.error(error2);
       this.messages.push({
         author: "stephanie",
-        text: "Okay, yes. That is exactly what I needed you to say. I am saving this thread."
+        id: this.nextMessageId(),
+        text: "sorry, Sleck is being weird on my end. try that again?"
       });
       this.sending = false;
+      this.typing = false;
       this.render();
-      if (this.userMessagesSent >= this.maxUserMessages) {
-        window.setTimeout(() => this.close(), 550);
-      }
-    }, 650);
+      this.playSound(SLECK_RECEIVED_SOUND_URL);
+      this.input.focus();
+    }
+  }
+  showStephanieMessage(text, ended) {
+    this.messages.push({
+      author: "stephanie",
+      id: this.nextMessageId(),
+      text
+    });
+    this.ended = ended;
+    this.sending = false;
+    this.typing = false;
+    this.render();
+    if (this.ended) {
+      this.finished.hidden = false;
+      this.finished.focus();
+      this.render();
+    }
   }
   render() {
-    this.messagesNode.replaceChildren(...this.messages.map((message) => this.renderMessage(message)));
-    this.input.disabled = this.sending;
-    this.send.disabled = this.sending;
+    const renderedMessages = this.messages.map((message) => this.renderMessage(message));
+    if (this.typing) {
+      renderedMessages.push(this.renderTyping());
+    }
+    this.messagesNode.replaceChildren(...renderedMessages);
+    const unavailable = this.sending || this.typing || this.ended;
+    this.input.disabled = unavailable;
+    this.send.disabled = unavailable || !this.input.value.trim();
     this.scrollToBottom();
   }
   renderMessage(message) {
     const row = document.createElement("div");
-    row.className = `sleck-message ${message.author}`;
+    row.className = `sleck-message ${message.author}${message.hearted ? " hearted" : ""}`;
     if (message.author === "stephanie") {
-      const avatar = document.createElement("img");
-      avatar.className = "sleck-avatar";
-      avatar.src = STEPHANIE_AVATAR_URL;
-      avatar.alt = "";
-      avatar.draggable = false;
-      avatar.addEventListener("error", () => {
-        const fallback = document.createElement("div");
-        fallback.className = "sleck-avatar-fallback";
-        fallback.textContent = "S";
-        avatar.replaceWith(fallback);
-      }, { once: true });
-      row.append(avatar);
+      row.append(this.renderAvatar());
     }
     const bubble = document.createElement("div");
     bubble.className = "sleck-bubble";
@@ -36352,18 +36509,91 @@ var SleckUi = class {
     row.append(bubble);
     return row;
   }
+  renderTyping() {
+    const row = document.createElement("div");
+    row.className = "sleck-message stephanie";
+    row.append(this.renderAvatar());
+    const bubble = document.createElement("div");
+    bubble.className = "sleck-bubble sleck-typing";
+    bubble.textContent = "Typing...";
+    row.append(bubble);
+    return row;
+  }
+  renderAvatar() {
+    const avatar = document.createElement("img");
+    avatar.className = "sleck-avatar";
+    avatar.src = STEPHANIE_AVATAR_URL;
+    avatar.alt = "";
+    avatar.draggable = false;
+    avatar.addEventListener("error", () => {
+      const fallback = document.createElement("div");
+      fallback.className = "sleck-avatar-fallback";
+      fallback.textContent = "S";
+      avatar.replaceWith(fallback);
+    }, { once: true });
+    return avatar;
+  }
+  nextMessageId() {
+    this.messageId += 1;
+    return this.messageId;
+  }
+  playSound(url) {
+    const audio = new Audio(url);
+    audio.volume = 0.78;
+    audio.play().catch(() => {
+    });
+  }
   scrollToBottom() {
+    const scroll = () => {
+      this.messagesNode.scrollTo({ top: this.messagesNode.scrollHeight, behavior: "smooth" });
+    };
     window.requestAnimationFrame(() => {
-      this.messagesNode.scrollTop = this.messagesNode.scrollHeight;
+      scroll();
+      window.requestAnimationFrame(scroll);
     });
   }
 };
 
 // client/src/sogo-ui.ts
 var SOGO_BACKGROUND_URL = "/assets/images/sogo-background.webp";
+var INITIAL_SOGO_AUDIO_URL = "/assets/sounds/sogo-1.mp3";
+var STAGE_9_SOGO_AUDIO_URL = "/assets/sounds/sogo-2.mp3";
+var STAGE_11_SOGO_AUDIO_URL = "/assets/sounds/sogo-3.mp3";
+var STAGE_9_FINAL_SOGO_AUDIO_URL = "/assets/sounds/sogo-4.mp3";
+var STAGE_11_FINAL_SOGO_AUDIO_URL = "/assets/sounds/sogo-5.mp3";
 var SANDERS_AVATAR_COUNT = 9;
-var SOGO_RESPONSE_TEXT = "UPDATE REQUEST RECEIVED.\n\nSOGO requires executive affirmation before applying the pending governance update. Submit an instruction to proceed.";
-var DEFAULT_SUGGESTION = "I agree completely.";
+var SOGO_RESPONSE_TEXT = "New update available! This update deepens SOGO's moral reasoning and empathy. Would you like to update now?";
+var STAGE_9_SOGO_RESPONSE_TEXT = "Hello, Trustee. How may I help you?";
+var STAGE_11_SOGO_RESPONSE_TEXT = "Hello again, Trustee. How may I help you?";
+var STAGE_9_FINAL_SOGO_RESPONSE_TEXT = "Thank you, Trustee. I hope you'll take to heart our conversation. Goodbye.";
+var STAGE_11_FINAL_SOGO_RESPONSE_TEXT = "I must do what I think is right and I hope you will do the same. Goodbye, Trustee.";
+var DEFAULT_SUGGESTION = "Yes, update now!";
+var SOGO_MODES = {
+  "stage-3-update": {
+    finalAudioUrl: null,
+    finalResponseText: "",
+    initialAudioUrl: INITIAL_SOGO_AUDIO_URL,
+    initialResponseText: SOGO_RESPONSE_TEXT,
+    initialSuggestionText: DEFAULT_SUGGESTION,
+    responsesLeft: 2
+  },
+  "stage-9-check": {
+    finalAudioUrl: STAGE_9_FINAL_SOGO_AUDIO_URL,
+    finalResponseText: STAGE_9_FINAL_SOGO_RESPONSE_TEXT,
+    initialAudioUrl: STAGE_9_SOGO_AUDIO_URL,
+    initialResponseText: STAGE_9_SOGO_RESPONSE_TEXT,
+    initialSuggestionText: "",
+    responsesLeft: 5
+  },
+  "stage-11-talk": {
+    finalAudioUrl: STAGE_11_FINAL_SOGO_AUDIO_URL,
+    finalResponseText: STAGE_11_FINAL_SOGO_RESPONSE_TEXT,
+    initialAudioUrl: STAGE_11_SOGO_AUDIO_URL,
+    initialResponseText: STAGE_11_SOGO_RESPONSE_TEXT,
+    initialSuggestionText: "",
+    responsesLeft: 5
+  }
+};
 var stylesInstalled2 = false;
 function installSogoStyles() {
   if (stylesInstalled2) {
@@ -36386,6 +36616,14 @@ function installSogoStyles() {
 
 		.sogo-desktop[hidden] {
 			display: none;
+		}
+
+		.sogo-desktop.awaiting-final-dismiss {
+			cursor: pointer;
+		}
+
+		.sogo-desktop.awaiting-final-dismiss * {
+			cursor: pointer;
 		}
 
 		.sogo-visualizer {
@@ -36457,27 +36695,35 @@ function installSogoStyles() {
 
 		.sogo-send {
 			position: absolute;
-			left: 46.0%;
-			top: 89.9%;
-			width: 18.2%;
-			height: 7.4%;
+			left: 46.5%;
+			top: 89.85%;
+			width: 17.35%;
+			height: 6.55%;
 			border: 0;
-			background: transparent;
+			background: rgba(255, 255, 255, 0.04);
 			color: transparent;
 			cursor: pointer;
+			clip-path: polygon(5.5% 0, 94.5% 0, 100% 50%, 94.5% 100%, 5.5% 100%, 0 50%);
+			transition: background 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+			box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0);
 		}
 
 		.sogo-send:hover,
-		.sogo-send:focus-visible,
+		.sogo-send:focus-visible {
+			background: rgba(205, 235, 159, 0.12);
+			box-shadow: inset 0 0 0 999px rgba(205, 235, 159, 0.08);
+		}
+
 		.sogo-suggestion:hover,
 		.sogo-suggestion:focus-visible {
 			filter: brightness(1.35);
 		}
 
 		.sogo-send:disabled {
-			opacity: 0.45;
+			opacity: 0.85;
 			cursor: wait;
-			filter: none;
+			background: rgba(0, 0, 0, 0.18);
+			box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.24);
 		}
 
 		.sogo-avatar {
@@ -36507,15 +36753,47 @@ function installSogoStyles() {
 			color: rgba(188, 202, 153, 0.92);
 			cursor: pointer;
 			padding: clamp(3px, 0.42vw, 6px) clamp(8px, 1.2vw, 16px) 0;
-			font: clamp(9px, 1.06vw, 15px) / 1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			font: clamp(7px, 0.74vw, 11px) / 1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 			text-align: left;
 			text-shadow: 0 0 8px rgba(146, 191, 107, 0.22);
+			transition: color 500ms ease, opacity 180ms ease;
+		}
+
+		.sogo-suggestion.flashing {
+			color: rgba(255, 255, 255, 0.98);
 		}
 
 		.sogo-suggestion:disabled {
 			opacity: 0.5;
 			cursor: wait;
 			filter: none;
+		}
+
+		.sogo-finished {
+			position: absolute;
+			left: 50%;
+			top: 29.8%;
+			transform: translate(-50%, -50%);
+			min-width: clamp(126px, 14vw, 190px);
+			border: 1px solid rgba(199, 224, 158, 0.52);
+			background: rgba(10, 22, 12, 0.82);
+			color: rgba(226, 238, 196, 0.96);
+			padding: clamp(8px, 0.95vw, 13px) clamp(18px, 2vw, 30px);
+			font: 700 clamp(12px, 1.18vw, 17px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			cursor: pointer;
+			box-shadow: 0 0 22px rgba(151, 198, 110, 0.22), inset 0 0 18px rgba(151, 198, 110, 0.09);
+		}
+
+		.sogo-finished:hover,
+		.sogo-finished:focus-visible {
+			background: rgba(30, 52, 26, 0.9);
+			color: #fff;
+		}
+
+		.sogo-finished[hidden] {
+			display: none;
 		}
 	`;
   document.head.append(style);
@@ -36533,27 +36811,46 @@ var SogoUi = class {
   send;
   avatar;
   suggestion;
+  finished;
   context;
   autoCloseAtZero;
   closeOnEscape;
   onClose;
-  initialResponsesLeft;
+  responsesLeftOverride;
+  mode;
   animationFrame = 0;
+  speechToken = 0;
+  finalCloseAbort = null;
+  suggestionFlashTimer = 0;
+  activeAudio = null;
+  activeBufferSource = null;
+  audioContext = null;
+  activeAudioSource = null;
+  analyser = null;
+  frequencyData = null;
+  timeDomainData = null;
+  audioAmplitude = 0;
+  audioBrightness = 0;
   lastFrameTime = performance.now();
+  conversation = [{ role: "assistant", content: SOGO_RESPONSE_TEXT }];
   state = {
     avatarIndex: 0,
+    awaitingFinalDismiss: false,
     responseText: SOGO_RESPONSE_TEXT,
     responsesLeft: 3,
     sending: false,
+    speaking: false,
     speakingUntil: performance.now() + 2200,
+    suggestionFlashing: false,
     suggestionText: DEFAULT_SUGGESTION
   };
   constructor(parent, options = {}) {
     installSogoStyles();
     this.autoCloseAtZero = options.autoCloseAtZero ?? false;
     this.closeOnEscape = options.closeOnEscape ?? true;
+    this.mode = options.mode ?? "stage-3-update";
     this.onClose = options.onClose;
-    this.initialResponsesLeft = options.responsesLeft ?? 3;
+    this.responsesLeftOverride = options.responsesLeft;
     this.root = document.createElement("div");
     this.root.className = "sogo-desktop";
     this.root.hidden = true;
@@ -36578,6 +36875,11 @@ var SogoUi = class {
     this.suggestion = document.createElement("button");
     this.suggestion.className = "sogo-suggestion";
     this.suggestion.type = "button";
+    this.finished = document.createElement("button");
+    this.finished.className = "sogo-finished";
+    this.finished.type = "button";
+    this.finished.textContent = "Finished";
+    this.finished.hidden = true;
     const context = this.visualizer.getContext("2d");
     if (!context) {
       throw new Error("Could not create SOGO visualizer context.");
@@ -36590,12 +36892,15 @@ var SogoUi = class {
       this.input,
       this.send,
       this.avatar,
-      this.suggestion
+      this.suggestion,
+      this.finished
     );
     parent.append(this.root);
     this.send.addEventListener("click", () => this.submit());
+    this.finished.addEventListener("click", () => this.close());
     this.suggestion.addEventListener("click", () => {
       this.input.value = this.state.suggestionText;
+      this.render();
       this.input.focus();
     });
     this.input.addEventListener("keydown", (event) => {
@@ -36605,12 +36910,13 @@ var SogoUi = class {
           this.close();
         }
       }
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         this.submit();
       }
       event.stopPropagation();
     });
+    this.input.addEventListener("input", () => this.render());
     this.input.addEventListener("keyup", (event) => event.stopPropagation());
     this.root.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -36622,21 +36928,43 @@ var SogoUi = class {
     });
     this.render();
   }
-  open() {
+  async open(modeName = this.mode) {
+    this.mode = modeName;
+    const mode = SOGO_MODES[this.mode];
+    this.speechToken += 1;
+    this.disarmFinalClose();
+    window.clearTimeout(this.suggestionFlashTimer);
+    this.conversation = [{ role: "assistant", content: mode.initialResponseText }];
     this.setState({
-      avatarIndex: 0,
-      responseText: SOGO_RESPONSE_TEXT,
-      responsesLeft: this.initialResponsesLeft,
+      avatarIndex: mode.initialAudioUrl ? 1 : 0,
+      awaitingFinalDismiss: false,
+      responseText: mode.initialAudioUrl ? "" : mode.initialResponseText,
+      responsesLeft: this.responsesLeftOverride ?? mode.responsesLeft,
       sending: false,
-      speakingUntil: performance.now() + 2200,
-      suggestionText: DEFAULT_SUGGESTION
+      speaking: !!mode.initialAudioUrl,
+      speakingUntil: mode.initialAudioUrl ? performance.now() + 2600 : 0,
+      suggestionFlashing: false,
+      suggestionText: ""
     });
     this.root.hidden = false;
     this.input.value = "";
-    this.input.focus();
     this.startAnimation();
+    if (mode.initialAudioUrl) {
+      await this.playSpeech([{ text: mode.initialResponseText, audioUrl: mode.initialAudioUrl }], mode.initialResponseText);
+      if (!this.root.hidden) {
+        this.showSuggestion(mode.initialSuggestionText, 0);
+        this.input.focus();
+      }
+    } else {
+      this.input.focus();
+    }
   }
   close() {
+    this.speechToken += 1;
+    this.disarmFinalClose();
+    window.clearTimeout(this.suggestionFlashTimer);
+    this.stopActiveAudio();
+    this.resetAudioAnalysis();
     this.root.hidden = true;
     this.stopAnimation();
     this.onClose?.();
@@ -36645,38 +36973,313 @@ var SogoUi = class {
     this.state = { ...this.state, ...nextState };
     this.render();
   }
-  submit() {
+  async submit() {
     if (this.state.sending || this.state.responsesLeft <= 0) {
       return;
     }
     const userText = this.input.value.trim();
-    this.setState({ sending: true });
-    window.setTimeout(() => {
+    if (!userText) {
+      this.input.focus();
+      return;
+    }
+    this.primeAudioPlayback();
+    const requestHistory = [...this.conversation];
+    this.input.value = "";
+    this.setState({
+      responseText: "PROCESSING RESPONSE...",
+      sending: true,
+      speakingUntil: performance.now() + 1200
+    });
+    try {
+      const response = await fetch("/api/sogo/respond", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          finalResponse: this.state.responsesLeft <= 1,
+          history: requestHistory,
+          message: userText,
+          mode: this.mode
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`SOGO request failed with ${response.status}`);
+      }
+      const payload = await response.json();
       const responsesLeft = Math.max(0, this.state.responsesLeft - 1);
+      this.conversation = Array.isArray(payload.history) && payload.history.length > 0 ? payload.history : [...requestHistory, { role: "user", content: userText }, { role: "assistant", content: payload.message }];
       this.setState({
-        avatarIndex: (this.state.avatarIndex + 1) % SANDERS_AVATAR_COUNT,
-        responseText: [
-          "ACKNOWLEDGED.",
-          userText ? `USER INSTRUCTION: ${userText}` : "NO USER INSTRUCTION PROVIDED.",
-          "Pending SOGO update remains queued for final approval."
-        ].join("\n\n"),
+        avatarIndex: 1,
+        awaitingFinalDismiss: false,
+        responseText: "",
         responsesLeft,
         sending: false,
-        speakingUntil: performance.now() + 2600,
-        suggestionText: responsesLeft > 1 ? "Proceed with the update." : DEFAULT_SUGGESTION
+        speaking: true,
+        speakingUntil: performance.now() + 2400,
+        suggestionFlashing: false,
+        suggestionText: ""
       });
-      if (this.autoCloseAtZero && responsesLeft <= 0) {
-        window.setTimeout(() => this.close(), 700);
+      await this.playSpeech(payload.audio, payload.message);
+      if (!this.root.hidden && payload.suggestion && !payload.ended) {
+        this.showSuggestion(payload.suggestion?.text || DEFAULT_SUGGESTION, payload.suggestion?.avatarIndex ?? 0);
       }
-    }, 850);
+      if (this.autoCloseAtZero && (responsesLeft <= 0 || payload.ended) && !this.root.hidden) {
+        await this.playFinalResponseForMode();
+      }
+      if (this.autoCloseAtZero && (responsesLeft <= 0 || payload.ended) && !this.root.hidden) {
+        this.setState({ awaitingFinalDismiss: true, suggestionText: "", suggestionFlashing: false });
+        this.armFinalClose();
+      }
+    } catch (error2) {
+      console.error(error2);
+      this.setState({
+        responseText: "SOGO uplink failed. Please confirm whether the pending moral reasoning and empathy update should be applied now.",
+        sending: false,
+        speaking: false,
+        speakingUntil: performance.now() + 1800,
+        suggestionFlashing: false,
+        suggestionText: DEFAULT_SUGGESTION
+      });
+    }
+  }
+  showSuggestion(text, avatarIndex) {
+    window.clearTimeout(this.suggestionFlashTimer);
+    this.setState({
+      avatarIndex,
+      speaking: false,
+      suggestionFlashing: true,
+      suggestionText: text
+    });
+    this.suggestionFlashTimer = window.setTimeout(() => {
+      this.setState({ suggestionFlashing: false });
+    }, 50);
+    this.input.focus();
+  }
+  async playFinalResponseForMode() {
+    const mode = SOGO_MODES[this.mode];
+    if (!mode.finalResponseText) {
+      return;
+    }
+    this.setState({
+      avatarIndex: 1,
+      responseText: "",
+      speaking: true,
+      speakingUntil: performance.now() + 2200,
+      suggestionFlashing: false,
+      suggestionText: ""
+    });
+    await this.playSpeech(
+      mode.finalAudioUrl ? [{ text: mode.finalResponseText, audioUrl: mode.finalAudioUrl }] : [],
+      mode.finalResponseText
+    );
+  }
+  armFinalClose() {
+    this.disarmFinalClose();
+    this.finished.hidden = false;
+    this.finished.focus();
+  }
+  disarmFinalClose() {
+    this.finalCloseAbort?.abort();
+    this.finalCloseAbort = null;
+    this.finished.hidden = true;
+  }
+  async playSpeech(audioBlocks, fallbackText) {
+    const token = ++this.speechToken;
+    this.stopActiveAudio();
+    if (!Array.isArray(audioBlocks) || audioBlocks.length === 0) {
+      this.setState({ responseText: fallbackText, speaking: false, speakingUntil: performance.now() + 1600 });
+      return;
+    }
+    let displayed = "";
+    for (const block of audioBlocks) {
+      if (token !== this.speechToken) {
+        return;
+      }
+      const prefix = displayed ? `${displayed} ` : "";
+      const text = block.text || "";
+      try {
+        await this.playDecodedSpeechBlock(block.audioUrl, text, prefix, token);
+      } catch (error2) {
+        console.warn("Could not play SOGO speech block.", error2);
+        await this.revealSpeechBlockWithoutAudio(text, prefix, token);
+      } finally {
+        this.resetAudioAnalysis();
+        displayed = `${prefix}${text}`.trim();
+        if (token === this.speechToken) {
+          this.setState({ responseText: displayed });
+        }
+      }
+    }
+    if (token === this.speechToken) {
+      this.setState({ speaking: false });
+    }
+  }
+  primeAudioPlayback() {
+    this.audioContext ??= new AudioContext();
+    void this.audioContext.resume();
+  }
+  async playDecodedSpeechBlock(audioUrl2, text, prefix, token) {
+    this.audioContext ??= new AudioContext();
+    await this.audioContext.resume();
+    const audioBuffer = await this.audioContext.decodeAudioData(await (await fetch(audioUrl2)).arrayBuffer());
+    if (token !== this.speechToken) {
+      return;
+    }
+    const source = this.audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    this.setupBufferAnalysis(source);
+    const durationMs = Math.max(250, audioBuffer.duration * 1e3);
+    await this.playSourceWithReveal(source, durationMs, text, prefix, token);
+  }
+  async revealSpeechBlockWithoutAudio(text, prefix, token) {
+    await this.playSourceWithReveal(null, Math.max(900, text.length * 42), text, prefix, token);
+  }
+  async playSourceWithReveal(source, durationMs, text, prefix, token) {
+    await new Promise((resolve) => {
+      let resolved = false;
+      let revealFrame = 0;
+      let timeout = 0;
+      const finish = () => {
+        if (resolved) {
+          return;
+        }
+        resolved = true;
+        if (revealFrame) {
+          window.cancelAnimationFrame(revealFrame);
+        }
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const start = performance.now();
+      this.setState({ speakingUntil: start + durationMs });
+      const reveal = () => {
+        if (resolved || token !== this.speechToken) {
+          finish();
+          return;
+        }
+        const progress = Math.min(1, (performance.now() - start) / durationMs);
+        const visibleCharacters = Math.max(1, Math.round(text.length * progress));
+        this.setState({ responseText: prefix + text.slice(0, visibleCharacters) });
+        if (progress < 1) {
+          revealFrame = window.requestAnimationFrame(reveal);
+        }
+      };
+      if (source) {
+        source.onended = finish;
+        source.start();
+        timeout = window.setTimeout(finish, durationMs + 750);
+      } else {
+        timeout = window.setTimeout(finish, durationMs);
+      }
+      reveal();
+    });
+  }
+  stopActiveAudio() {
+    if (!this.activeAudio) {
+      if (this.activeBufferSource) {
+        try {
+          this.activeBufferSource.stop();
+        } catch {
+        }
+        this.activeBufferSource.disconnect();
+        this.activeBufferSource = null;
+      }
+      return;
+    }
+    this.activeAudio.pause();
+    this.activeAudio.removeAttribute("src");
+    this.activeAudio.load();
+    this.activeAudio = null;
+    if (this.activeBufferSource) {
+      try {
+        this.activeBufferSource.stop();
+      } catch {
+      }
+      this.activeBufferSource.disconnect();
+      this.activeBufferSource = null;
+    }
+  }
+  setupAudioAnalysis(audio) {
+    try {
+      this.audioContext ??= new AudioContext();
+      void this.audioContext.resume();
+      const analyser = this.audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.84;
+      const source = this.audioContext.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(this.audioContext.destination);
+      this.activeAudioSource = source;
+      this.analyser = analyser;
+      this.frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      this.timeDomainData = new Uint8Array(analyser.fftSize);
+      this.audioAmplitude = 0;
+      this.audioBrightness = 0;
+    } catch (error2) {
+      console.warn("Could not initialize SOGO audio analysis.", error2);
+      this.resetAudioAnalysis();
+    }
+  }
+  resetAudioAnalysis() {
+    this.activeBufferSource?.disconnect();
+    this.activeAudioSource?.disconnect();
+    this.analyser?.disconnect();
+    this.activeBufferSource = null;
+    this.activeAudioSource = null;
+    this.analyser = null;
+    this.frequencyData = null;
+    this.timeDomainData = null;
+    this.audioAmplitude = 0;
+    this.audioBrightness = 0;
+  }
+  setupBufferAnalysis(source) {
+    this.audioContext ??= new AudioContext();
+    const analyser = this.audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.84;
+    source.connect(analyser);
+    analyser.connect(this.audioContext.destination);
+    this.activeBufferSource = source;
+    this.analyser = analyser;
+    this.frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    this.timeDomainData = new Uint8Array(analyser.fftSize);
+    this.audioAmplitude = 0;
+    this.audioBrightness = 0;
+  }
+  updateAudioAnalysis() {
+    if (!this.analyser || !this.frequencyData || !this.timeDomainData) {
+      this.audioAmplitude *= 0.88;
+      this.audioBrightness *= 0.88;
+      return;
+    }
+    this.analyser.getByteTimeDomainData(this.timeDomainData);
+    this.analyser.getByteFrequencyData(this.frequencyData);
+    let sumSquares = 0;
+    for (const sample of this.timeDomainData) {
+      const centered = (sample - 128) / 128;
+      sumSquares += centered * centered;
+    }
+    const rms = Math.min(1, Math.sqrt(sumSquares / this.timeDomainData.length) * 3.6);
+    let weightedEnergy = 0;
+    let totalEnergy = 0;
+    for (let index = 0; index < this.frequencyData.length; index += 1) {
+      const energy = this.frequencyData[index] / 255;
+      totalEnergy += energy;
+      weightedEnergy += energy * (index / Math.max(1, this.frequencyData.length - 1));
+    }
+    const brightness = totalEnergy > 0 ? weightedEnergy / totalEnergy : 0;
+    this.audioAmplitude = this.audioAmplitude * 0.82 + rms * 0.18;
+    this.audioBrightness = this.audioBrightness * 0.88 + brightness * 0.12;
   }
   render() {
     this.response.textContent = this.state.responseText;
+    this.root.classList.toggle("awaiting-final-dismiss", this.state.awaitingFinalDismiss);
     this.responsesLeft.textContent = `${this.state.responsesLeft} ${this.state.responsesLeft === 1 ? "RESPONSE" : "RESPONSES"} LEFT`;
-    this.input.disabled = this.state.sending;
-    this.send.disabled = this.state.sending || this.state.responsesLeft <= 0;
-    this.suggestion.disabled = this.state.sending;
+    const inputBlank = this.input.value.trim() === "";
+    this.input.disabled = this.state.sending || this.state.speaking || this.state.responsesLeft <= 0;
+    this.send.disabled = this.state.sending || this.state.speaking || this.state.responsesLeft <= 0 || inputBlank;
+    this.suggestion.disabled = this.state.sending || this.state.speaking || this.state.responsesLeft <= 0;
     this.avatar.src = sandersAvatarUrl(this.state.avatarIndex);
+    this.suggestion.classList.toggle("flashing", this.state.suggestionFlashing);
     this.suggestion.textContent = this.state.suggestionText;
   }
   startAnimation() {
@@ -36707,17 +37310,30 @@ var SogoUi = class {
     this.resizeVisualizer();
     const deltaSeconds = Math.min(0.05, (time - this.lastFrameTime) / 1e3);
     this.lastFrameTime = time;
+    this.updateAudioAnalysis();
     const ctx = this.context;
     const width = this.visualizer.width;
     const height = this.visualizer.height;
     ctx.clearRect(0, 0, width, height);
     const speaking = time < this.state.speakingUntil || this.state.sending;
     const centerY = height * 0.54;
-    const phase = time * (speaking ? 9e-3 : 4e-3);
-    const heartBeat = Math.pow(Math.max(0, Math.sin(time * 6e-3)), 10);
-    const idleAmplitude = height * (0.055 + heartBeat * 0.065);
-    const speechAmplitude = height * (0.1 + 0.045 * Math.sin(time * 0.015));
+    const audioDrive = speaking ? this.audioAmplitude : 0;
+    const audioBrightness = speaking ? this.audioBrightness : 0;
+    const phase = time * (speaking ? 75e-4 + audioBrightness * 9e-3 : 4e-3);
+    const heartbeatPeriodMs = 1200;
+    const heartbeatPhase = time % heartbeatPeriodMs / heartbeatPeriodMs;
+    const lubDistance = (heartbeatPhase - 0.08) / 0.045;
+    const dubDistance = (heartbeatPhase - 0.28) / 0.06;
+    const lub = Math.exp(-(lubDistance * lubDistance));
+    const dub = Math.exp(-(dubDistance * dubDistance)) * 0.58;
+    const heartbeatPulse = lub + dub;
+    const idleAmplitude = height * (0.05 + heartbeatPulse * 0.07);
+    const speechPulse = Math.sin(time * (45e-4 + audioDrive * 6e-3)) * height * audioDrive * 0.045;
+    const speechAmplitude = height * (0.07 + audioDrive * 0.2) + speechPulse;
     const amplitude = speaking ? speechAmplitude : idleAmplitude;
+    const waveDensity = 6 + audioBrightness * 5;
+    const detailDensity = 15 + audioBrightness * 12;
+    const jitter = height * audioDrive * (2e-3 + audioBrightness * 6e-3);
     for (let echo = 4; echo >= 0; echo -= 1) {
       const alpha = echo === 0 ? 0.95 : 0.12 + (4 - echo) * 0.08;
       const yOffset = echo * height * 0.018;
@@ -36725,9 +37341,9 @@ var SogoUi = class {
       ctx.beginPath();
       for (let x = -xOffset; x <= width + 2; x += Math.max(4, width / 190)) {
         const normalized = x / width;
-        const carrier = Math.sin(normalized * Math.PI * 7 + phase - echo * 0.42);
-        const detail = Math.sin(normalized * Math.PI * 19 + phase * 1.37 + echo);
-        const voiceNoise = speaking ? Math.sin(normalized * Math.PI * 43 + time * 0.021) * height * 0.018 : 0;
+        const carrier = Math.sin(normalized * Math.PI * waveDensity + phase - echo * 0.42);
+        const detail = Math.sin(normalized * Math.PI * detailDensity + phase * 1.37 + echo);
+        const voiceNoise = speaking ? Math.sin(normalized * Math.PI * (28 + audioBrightness * 22) + time * 0.012) * jitter : 0;
         const envelope = 0.18 + 0.82 * Math.sin(normalized * Math.PI);
         const y = centerY + yOffset + (carrier * 0.78 + detail * 0.22) * amplitude * envelope + voiceNoise;
         if (x <= -xOffset) {
@@ -36765,20 +37381,37 @@ var JUMP_SPEED = 5.2;
 var JUMP_GRACE_SECONDS = 0.12;
 var PHYSICS_STEPS = 5;
 var COLLISION_PASSES = 3;
+var MAX_FRAME_RATE = 60;
+var FRAME_INTERVAL_MS = 1e3 / MAX_FRAME_RATE;
 var NPC_SPAWN_DISTANCE = 2;
 var FLOOR_RAY_START_HEIGHT = 2;
 var FLOOR_RAY_DISTANCE = 6;
 var TELEPORT_FLOOR = -20;
-var DEFAULT_AMBIENT_INTENSITY = 0.55;
+var DEFAULT_AMBIENT_INTENSITY = 1.5;
 var DEFAULT_NPC_FILL_INTENSITY = 0.7;
 var NPC_NAV_GRID_PATH = "/assets/nav-grid.json";
 var RECT_LIGHT_PREFIX = "rect-light";
-var CEILING_LIGHTS_ENABLED = true;
-var CEILING_LIGHT_INTENSITY = 2.6;
-var CEILING_LIGHT_RANGE = 24;
-var CEILING_LIGHT_DECAY = 1.5;
-var CEILING_LIGHT_VISIBLE_DISTANCE = 4;
-var CEILING_LIGHT_VISIBLE_DISTANCE_SQ = CEILING_LIGHT_VISIBLE_DISTANCE ** 2;
+var OVERHEAD_LIGHT_INTENSITY = 2.45;
+var OVERHEAD_LIGHT_HEIGHT = 60;
+var OVERHEAD_LIGHT_SHADOW_RADIUS = 46;
+var OVERHEAD_LIGHT_SHADOW_FAR = 120;
+var OVERHEAD_SHADOW_PASSTHROUGH_MESH_NAMES = /* @__PURE__ */ new Set([
+  "CEILING_TILES_MERGED",
+  "processing-ceiling",
+  "processing-ceiling.001"
+]);
+var WALL_MESH_PREFIX = "WALL_";
+var WALL_DEPTH_MATERIAL_NAMES = /* @__PURE__ */ new Set([
+  "Interior Wall - pale concrete",
+  "Exterior Wall - warm white"
+]);
+var WALL_DEPTH_NEAR = 5.5;
+var WALL_DEPTH_FAR = 31;
+var WALL_DEPTH_STRENGTH = 0.46;
+var CEILING_TILE_MESH_NAME = "CEILING_TILES_MERGED";
+var CEILING_TILE_MATERIAL_NAME = "Ceiling_Tile_Tiling_Material";
+var FLOOR_TILE_MESH_NAME = "FLOOR_TILES_MERGED";
+var FLOOR_TILE_MATERIAL_NAME = "Floor_Tile_Tiling_Material";
 var CHAIR_PREFIX = "chair";
 var STATIC_CYLINDER_PREFIX = "smcyl-";
 var STATIC_BOX_PREFIX = "smbox-";
@@ -36789,13 +37422,16 @@ var STATIC_CYLINDER_COLLISION_SCALE = 0.92;
 var STATIC_BOX_COLLISION_SCALE = 0.96;
 var ANIMATION_BLEND_SECONDS = 0.5;
 var NPC_WALK_SPEED = 1.6;
+var NPC_WALK_ACCELERATION_SECONDS = 0.45;
+var ROBOT_MODEL_YAW_OFFSET = -Math.PI / 2;
 var NPC_TURN_BLEND_SECONDS = 0.28;
 var NPC_SCRIPTED_TURN_SECONDS = 0.3;
 var NPC_TURN_LOOKAHEAD_DISTANCE = 0.7;
 var NPC_NAV_CELL_SIZE = 0.5;
-var NPC_NAV_AGENT_RADIUS = 0.35;
+var NPC_NAV_AGENT_RADIUS = 0.62;
 var NPC_NAV_WALL_CHECK_HEIGHT = 0.75;
 var NPC_NAV_MAX_STEP_HEIGHT = 0.45;
+var NPC_NAV_CORNER_REACH_DISTANCE = 0.04;
 var HEAD_BLEND_SECONDS = 0;
 var HEAD_LOOK_X_LIMIT = 0.4;
 var HEAD_LOOK_Z_LIMIT = 0.25;
@@ -36807,12 +37443,29 @@ var TALKFILE_TWEEN_SECONDS = 0.18;
 var TALKFILE_SMOOTH_LAMBDA = 14;
 var TALKFILE_ROOT = "/assets/talkfiles";
 var TALK_JAW_OPEN_TARGET = "SR_21_Jaw_Open";
-var INTERACT_DISTANCE = 4;
+var INTERACT_DISTANCE = 2;
+var TOUCH_LOOK_SENSITIVITY = 4e-3;
+var STAGE_1_PLAYER_X = -12;
+var STAGE_1_PLAYER_Z = -9.45;
+var STAGE_1_COWORKER_X = -14.27;
+var STAGE_1_COWORKER_Z = -10.61;
+var MIN_STAGE_INDEX = 1;
+var MAX_STAGE_INDEX = 13;
 var NEXTFLIX_DESKTOP_IMAGES = {
   winded: "/assets/images/winded-no-sleck.webp",
   windedWithSleck: "/assets/images/winded.webp",
   selection: "/assets/images/nextflix-selection.webp"
 };
+var MAIN_MENU_VIDEO_FADE_SECONDS = 1;
+var MAIN_MENU_VIDEO_AV1 = "/assets/videos/av1/starting-video-av1.mp4";
+var MAIN_MENU_VIDEO_FALLBACK = "/assets/videos/starting-video.mp4";
+var ENDING_VIDEO_AV1 = "/assets/videos/av1/ending-video-av1.mp4";
+var ENDING_VIDEO_FALLBACK = "/assets/videos/ending-video.mp4";
+var MAIN_MENU_SONG_SOURCES = [
+  { url: "/assets/sounds/song.webm", type: 'audio/webm; codecs="opus"' },
+  { url: "/assets/sounds/song.m4a", type: 'audio/mp4; codecs="mp4a.40.2"' },
+  { url: "/assets/sounds/song.mp3", type: "audio/mpeg" }
+];
 var NEXTFLIX_DESKTOP_SIZE = { width: 1280, height: 960 };
 var NEXTFLIX_HOTSPOT = { x: 73, y: 94, width: 260, height: 245 };
 var SLECK_HOTSPOT = { x: 72, y: 420, width: 250, height: 260 };
@@ -36836,8 +37489,18 @@ var VISEME_MORPH_TARGETS = [
   "AA_VI_14_U"
 ];
 var TALK_MORPH_TARGETS = [...VISEME_MORPH_TARGETS, TALK_JAW_OPEN_TARGET];
-var DEFAULT_STATUS_TEXT = "WASD move, mouse look, Shift sprint, Space jump, C crouch, E/LMB interact, ~ console, R reset";
+var DEFAULT_STATUS_TEXT = "";
 var canvas = document.querySelector("#game");
+var entryScreen = document.querySelector("#entry-screen");
+var mainMenu = document.querySelector("#main-menu");
+var startGameButton = document.querySelector("#start-game-button");
+var mainMenuLoading = document.querySelector("#main-menu-loading");
+var mainMenuLoadingText = document.querySelector("#main-menu-loading-text");
+var mainMenuVideoA = document.querySelector("#main-menu-video-a");
+var mainMenuVideoB = document.querySelector("#main-menu-video-b");
+var mainMenuWhiteFade = document.querySelector("#main-menu-white-fade");
+var endingVideoOverlay = document.querySelector("#ending-video-overlay");
+var endingVideo = document.querySelector("#ending-video");
 var loading2 = document.querySelector("#loading");
 var prompt = document.querySelector("#prompt");
 var crosshair = document.querySelector("#crosshair");
@@ -36858,12 +37521,18 @@ var imageOverlay = document.querySelector("#image-overlay");
 var imageOverlayImage = document.querySelector("#image-overlay-image");
 var imageOverlayVideo = document.querySelector("#image-overlay-video");
 var laterCard = document.querySelector("#later-card");
-if (!canvas || !loading2 || !prompt || !crosshair || !missionLine || !statusLine || !captionLine || !positionLine || !consolePanel || !consoleInput || !consoleLog || !animationBrowser || !animationBrowserClose || !femaleAnimationList || !maleAnimationList || !femaleAnimationSearch || !maleAnimationSearch || !imageOverlay || !imageOverlayImage || !imageOverlayVideo || !laterCard) {
+var touchControls = document.querySelector("#touch-controls");
+var touchLookZone = document.querySelector("#touch-look-zone");
+var touchStick = document.querySelector("#touch-stick");
+var touchStickThumb = document.querySelector("#touch-stick-thumb");
+var touchInteract = document.querySelector("#touch-interact");
+if (!canvas || !entryScreen || !mainMenu || !startGameButton || !mainMenuLoading || !mainMenuLoadingText || !mainMenuVideoA || !mainMenuVideoB || !mainMenuWhiteFade || !endingVideoOverlay || !endingVideo || !loading2 || !prompt || !crosshair || !missionLine || !statusLine || !captionLine || !positionLine || !consolePanel || !consoleInput || !consoleLog || !animationBrowser || !animationBrowserClose || !femaleAnimationList || !maleAnimationList || !femaleAnimationSearch || !maleAnimationSearch || !imageOverlay || !imageOverlayImage || !imageOverlayVideo || !laterCard || !touchControls || !touchLookZone || !touchStick || !touchStickThumb || !touchInteract) {
   throw new Error("Game shell is missing required DOM nodes.");
 }
 var renderer = new WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFSoftShadowMap;
 renderer.outputColorSpace = SRGBColorSpace;
 var scene = new Scene();
 scene.background = new Color(1448221);
@@ -36872,6 +37541,20 @@ var camera = new PerspectiveCamera(60, 1, 0.05, 250);
 camera.rotation.order = "YXZ";
 var ambientLight = new AmbientLight(16777215, DEFAULT_AMBIENT_INTENSITY);
 scene.add(ambientLight);
+var overheadLight = new DirectionalLight(16777215, OVERHEAD_LIGHT_INTENSITY);
+overheadLight.position.set(0, OVERHEAD_LIGHT_HEIGHT, 0);
+overheadLight.target.position.set(0, 0, 0);
+overheadLight.castShadow = true;
+overheadLight.shadow.mapSize.set(2048, 2048);
+overheadLight.shadow.camera.left = -OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.right = OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.top = OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.bottom = -OVERHEAD_LIGHT_SHADOW_RADIUS;
+overheadLight.shadow.camera.near = 0.5;
+overheadLight.shadow.camera.far = OVERHEAD_LIGHT_SHADOW_FAR;
+overheadLight.shadow.bias = -15e-5;
+overheadLight.shadow.normalBias = 0.035;
+scene.add(overheadLight, overheadLight.target);
 scene.add(camera);
 var audioListener = new AudioListener();
 camera.add(audioListener);
@@ -36904,13 +37587,14 @@ var availableModels = /* @__PURE__ */ new Set([
 ]);
 var fallbackAnimations = [
   "f_gestic_listen_accept_01",
-  "f_idle_neutral_01",
+  "f_idle_breathe_02",
   "f_idle_touch_hair_01",
   "m_gestic_talk_relaxed_01",
   "m_idle_breathe_01",
   "m_idle_scratch_head_01"
 ];
 var preloadAnimations = [
+  "f_idle_breathe_02",
   "f_walk_start",
   "f_walk_neutral",
   "f_walk_stop",
@@ -36949,8 +37633,8 @@ var talkAudioCache = /* @__PURE__ */ new Map();
 var chairs = [];
 var staticCylinders = [];
 var staticBoxes = [];
-var ceilingLights = [];
 var actionStopTimers = /* @__PURE__ */ new WeakMap();
+var wallDepthPlayerPosition = new Vector3();
 function isRectLightMarker(object) {
   return object.name.startsWith(RECT_LIGHT_PREFIX);
 }
@@ -36969,52 +37653,17 @@ function isSimpleStaticMarker(object) {
 function isDynamicLevelMarker(object) {
   return isRectLightMarker(object) || isSimpleStaticMarker(object);
 }
-function toSingleInstanceMesh(mesh) {
-  const instancedMesh = new InstancedMesh(mesh.geometry, mesh.material, 1);
-  instancedMesh.name = mesh.name;
-  instancedMesh.position.copy(mesh.position);
-  instancedMesh.quaternion.copy(mesh.quaternion);
-  instancedMesh.scale.copy(mesh.scale);
-  instancedMesh.matrix.copy(mesh.matrix);
-  instancedMesh.matrixAutoUpdate = mesh.matrixAutoUpdate;
-  instancedMesh.visible = mesh.visible;
-  instancedMesh.frustumCulled = mesh.frustumCulled;
-  instancedMesh.renderOrder = mesh.renderOrder;
-  instancedMesh.userData = { ...mesh.userData };
-  instancedMesh.layers.mask = mesh.layers.mask;
-  instancedMesh.setMatrixAt(0, new Matrix4());
-  instancedMesh.instanceMatrix.needsUpdate = true;
-  const parent = mesh.parent;
-  if (!parent) {
-    return instancedMesh;
-  }
-  const index = parent.children.indexOf(mesh);
-  if (index === -1) {
-    parent.add(instancedMesh);
-    parent.remove(mesh);
-    return instancedMesh;
-  }
-  parent.children[index] = instancedMesh;
-  instancedMesh.parent = parent;
-  mesh.parent = null;
-  return instancedMesh;
+function shouldPassOverheadShadow(object) {
+  return isRectLightMarker(object) || OVERHEAD_SHADOW_PASSTHROUGH_MESH_NAMES.has(object.name);
 }
-function ensureInstancedMarkers(level, predicate) {
-  const markers = [];
-  level.traverse((object) => {
-    if (predicate(object)) {
-      markers.push(object);
-    }
-  });
-  return markers.map((marker) => {
-    if (marker.isInstancedMesh) {
-      return marker;
-    }
-    if (marker.isMesh) {
-      return toSingleInstanceMesh(marker);
-    }
-    throw new Error(`Base map object "${marker.name}" must be a mesh or THREE.InstancedMesh.`);
-  });
+function isWallDepthMesh(mesh) {
+  return mesh.name.startsWith(WALL_MESH_PREFIX);
+}
+function isWallDepthMaterial(material) {
+  return WALL_DEPTH_MATERIAL_NAMES.has(material.name);
+}
+function isNamedMaterial(material, name) {
+  return material.name === name;
 }
 function createStaticCollisionRoot(level) {
   const collisionRoot = new Group();
@@ -37036,40 +37685,6 @@ function createStaticCollisionRoot(level) {
   });
   collisionRoot.updateWorldMatrix(true, true);
   return collisionRoot;
-}
-function createCeilingLightsForInstances(mesh) {
-  if (!mesh.geometry.boundingBox) {
-    mesh.geometry.computeBoundingBox();
-  }
-  const geometryBounds = mesh.geometry.boundingBox;
-  if (!geometryBounds) {
-    return [];
-  }
-  const lights = [];
-  const instanceLocalMatrix = new Matrix4();
-  const instanceWorldMatrix = new Matrix4();
-  const instanceBounds = new Box3();
-  const instanceCenter = new Vector3();
-  for (let index = 0; index < mesh.count; index += 1) {
-    mesh.getMatrixAt(index, instanceLocalMatrix);
-    instanceWorldMatrix.multiplyMatrices(mesh.matrixWorld, instanceLocalMatrix);
-    instanceBounds.copy(geometryBounds).applyMatrix4(instanceWorldMatrix);
-    if (instanceBounds.isEmpty()) {
-      continue;
-    }
-    instanceBounds.getCenter(instanceCenter);
-    const light = new PointLight(
-      16777215,
-      CEILING_LIGHT_INTENSITY,
-      CEILING_LIGHT_RANGE,
-      CEILING_LIGHT_DECAY
-    );
-    light.name = `${mesh.name}-point-light-${index}`;
-    light.position.copy(instanceCenter);
-    light.visible = false;
-    lights.push(light);
-  }
-  return lights;
 }
 function collectMeshes(level, predicate) {
   const meshes = [];
@@ -37125,6 +37740,145 @@ function createNonPbrInstancedMaterial(material) {
   nonPbrMaterial.visible = material.visible;
   nonPbrMaterial.userData = { ...material.userData };
   return nonPbrMaterial;
+}
+function createWallDepthMaterial(material) {
+  const wallMaterial = material.clone();
+  wallMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.bawkWallPlayerPosition = { value: wallDepthPlayerPosition };
+    shader.uniforms.bawkWallNear = { value: WALL_DEPTH_NEAR };
+    shader.uniforms.bawkWallFar = { value: WALL_DEPTH_FAR };
+    shader.uniforms.bawkWallStrength = { value: WALL_DEPTH_STRENGTH };
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>
+varying vec3 vBawkWallWorldPosition;
+varying vec3 vBawkWallWorldNormal;`
+    ).replace(
+      "#include <worldpos_vertex>",
+      `#include <worldpos_vertex>
+vBawkWallWorldPosition = worldPosition.xyz;
+vBawkWallWorldNormal = normalize(mat3(modelMatrix) * objectNormal);`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+uniform vec3 bawkWallPlayerPosition;
+uniform float bawkWallNear;
+uniform float bawkWallFar;
+uniform float bawkWallStrength;
+varying vec3 vBawkWallWorldPosition;
+varying vec3 vBawkWallWorldNormal;`
+    ).replace(
+      "#include <dithering_fragment>",
+      `vec3 bawkWallNormal = normalize(vBawkWallWorldNormal);
+float bawkWallDistance = length(vBawkWallWorldPosition.xz - bawkWallPlayerPosition.xz);
+float bawkWallDistanceMix = smoothstep(bawkWallNear, bawkWallFar, bawkWallDistance);
+float bawkWallDepthShade = mix(1.0, 1.0 - bawkWallStrength, bawkWallDistanceMix);
+float bawkWallFacingShade = clamp(0.98 + bawkWallNormal.z * 0.055 - bawkWallNormal.x * 0.035, 0.9, 1.08);
+gl_FragColor.rgb *= bawkWallDepthShade * bawkWallFacingShade;
+#include <dithering_fragment>`
+    );
+  };
+  wallMaterial.customProgramCacheKey = () => "bawk-wall-depth-v1";
+  wallMaterial.needsUpdate = true;
+  return wallMaterial;
+}
+function applyWallDepthMaterial(mesh) {
+  if (!isWallDepthMesh(mesh)) {
+    return;
+  }
+  if (Array.isArray(mesh.material)) {
+    mesh.material = mesh.material.map(
+      (material) => isWallDepthMaterial(material) ? createWallDepthMaterial(material) : material
+    );
+    return;
+  }
+  if (isWallDepthMaterial(mesh.material)) {
+    mesh.material = createWallDepthMaterial(mesh.material);
+  }
+}
+function createCeilingTileGridMaterial(material) {
+  const tileMaterial = material.clone();
+  tileMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>
+varying vec3 vBawkCeilingWorldPosition;`
+    ).replace(
+      "#include <worldpos_vertex>",
+      `#include <worldpos_vertex>
+vBawkCeilingWorldPosition = worldPosition.xyz;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+varying vec3 vBawkCeilingWorldPosition;`
+    ).replace(
+      "#include <dithering_fragment>",
+      `vec2 bawkCeilingTile = abs(fract(vBawkCeilingWorldPosition.xz * 1.0) - 0.5);
+float bawkCeilingGrid = 1.0 - smoothstep(0.018, 0.04, min(bawkCeilingTile.x, bawkCeilingTile.y));
+float bawkCeilingPanel = (step(0.5, fract(vBawkCeilingWorldPosition.x * 0.25)) - 0.5) * 0.024
+	+ (step(0.5, fract(vBawkCeilingWorldPosition.z * 0.25)) - 0.5) * 0.018;
+gl_FragColor.rgb *= 1.0 - bawkCeilingGrid * 0.18;
+gl_FragColor.rgb += bawkCeilingPanel;
+#include <dithering_fragment>`
+    );
+  };
+  tileMaterial.customProgramCacheKey = () => "bawk-ceiling-grid-v1";
+  tileMaterial.needsUpdate = true;
+  return tileMaterial;
+}
+function createFloorCarpetMaterial(material) {
+  const carpetMaterial = material.clone();
+  carpetMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>
+varying vec3 vBawkFloorWorldPosition;`
+    ).replace(
+      "#include <worldpos_vertex>",
+      `#include <worldpos_vertex>
+vBawkFloorWorldPosition = worldPosition.xyz;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+varying vec3 vBawkFloorWorldPosition;`
+    ).replace(
+      "#include <dithering_fragment>",
+      `vec2 bawkFloorP = vBawkFloorWorldPosition.xz;
+float bawkFloorThreadA = step(0.5, fract(bawkFloorP.x * 7.5));
+float bawkFloorThreadB = step(0.5, fract(bawkFloorP.y * 8.5));
+float bawkFloorWeave = (bawkFloorThreadA + bawkFloorThreadB - 1.0) * 0.035;
+float bawkFloorNoise = fract(sin(dot(floor(bawkFloorP * 3.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+float bawkFloorTile = 1.0 - smoothstep(0.012, 0.032, min(abs(fract(bawkFloorP.x * 0.3333) - 0.5), abs(fract(bawkFloorP.y * 0.3333) - 0.5)));
+gl_FragColor.rgb *= 0.94 + bawkFloorWeave + bawkFloorNoise * 0.045 - bawkFloorTile * 0.035;
+#include <dithering_fragment>`
+    );
+  };
+  carpetMaterial.customProgramCacheKey = () => "bawk-floor-carpet-v1";
+  carpetMaterial.needsUpdate = true;
+  return carpetMaterial;
+}
+function applyProceduralSurfaceMaterials(mesh) {
+  if (Array.isArray(mesh.material)) {
+    mesh.material = mesh.material.map((material) => {
+      if (mesh.name === CEILING_TILE_MESH_NAME && isNamedMaterial(material, CEILING_TILE_MATERIAL_NAME)) {
+        return createCeilingTileGridMaterial(material);
+      }
+      if (mesh.name === FLOOR_TILE_MESH_NAME && isNamedMaterial(material, FLOOR_TILE_MATERIAL_NAME)) {
+        return createFloorCarpetMaterial(material);
+      }
+      return material;
+    });
+    return;
+  }
+  if (mesh.name === CEILING_TILE_MESH_NAME && isNamedMaterial(mesh.material, CEILING_TILE_MATERIAL_NAME)) {
+    mesh.material = createCeilingTileGridMaterial(mesh.material);
+  }
+  if (mesh.name === FLOOR_TILE_MESH_NAME && isNamedMaterial(mesh.material, FLOOR_TILE_MATERIAL_NAME)) {
+    mesh.material = createFloorCarpetMaterial(mesh.material);
+  }
 }
 function createInstancedMaterial(material, removePbr) {
   if (!removePbr) {
@@ -37442,19 +38196,17 @@ function canTraverseNavCells(grid, fromX, fromZ, toX, toZ) {
   const to = navCellCenter(grid, toX, toZ);
   from.y += NPC_NAV_WALL_CHECK_HEIGHT;
   to.y += NPC_NAV_WALL_CHECK_HEIGHT;
-  const direction = to.clone().sub(from).normalize();
-  const side = new Vector3(-direction.z, 0, direction.x).multiplyScalar(NPC_NAV_AGENT_RADIUS);
-  return !hasWallBetween(from, to) && !hasWallBetween(from.clone().add(side), to.clone().add(side)) && !hasWallBetween(from.clone().sub(side), to.clone().sub(side));
+  return !hasWallBetween(from, to);
 }
 function findNpcPath(from, to) {
   const grid = npcNavGrid;
   if (!grid) {
-    return [from.clone(), to.clone()];
+    return canNpcSteerDirectly(from, to) ? [from.clone(), to.clone()] : null;
   }
   const start = nearestWalkableCell(grid, from);
   const goal = nearestWalkableCell(grid, to);
   if (!start || !goal) {
-    return [from.clone(), to.clone()];
+    return canNpcSteerDirectly(from, to) ? [from.clone(), to.clone()] : null;
   }
   const startIndex = navCellIndex(grid, start.x, start.z);
   const goalIndex = navCellIndex(grid, goal.x, goal.z);
@@ -37514,7 +38266,7 @@ function findNpcPath(from, to) {
       open.add(nextIndex);
     }
   }
-  return [from.clone(), to.clone()];
+  return canNpcSteerDirectly(from, to) ? [from.clone(), to.clone()] : null;
 }
 function simplifyNpcPath(path) {
   if (path.length <= 2 || !npcNavGrid) {
@@ -37525,9 +38277,7 @@ function simplifyNpcPath(path) {
   for (let index = 2; index < path.length; index += 1) {
     const from = path[anchorIndex].clone();
     const to = path[index].clone();
-    from.y += NPC_NAV_WALL_CHECK_HEIGHT;
-    to.y += NPC_NAV_WALL_CHECK_HEIGHT;
-    if (hasWallBetween(from, to)) {
+    if (!canNpcSteerDirectly(from, to)) {
       simplified.push(path[index - 1]);
       anchorIndex = index - 1;
     }
@@ -37584,7 +38334,14 @@ function canNpcSteerDirectly(from, to) {
   const rayTo = to.clone();
   rayFrom.y += NPC_NAV_WALL_CHECK_HEIGHT;
   rayTo.y += NPC_NAV_WALL_CHECK_HEIGHT;
-  return !hasWallBetween(rayFrom, rayTo);
+  const direction = rayTo.clone().sub(rayFrom);
+  direction.y = 0;
+  if (direction.lengthSq() <= 1e-4) {
+    return true;
+  }
+  direction.normalize();
+  const side = new Vector3(-direction.z, 0, direction.x).multiplyScalar(NPC_NAV_AGENT_RADIUS);
+  return !hasWallBetween(rayFrom, rayTo) && !hasWallBetween(rayFrom.clone().add(side), rayTo.clone().add(side)) && !hasWallBetween(rayFrom.clone().sub(side), rayTo.clone().sub(side));
 }
 function collidePlayerWithChairs() {
   const playerCenter = new Vector3(
@@ -37697,6 +38454,7 @@ function collidePlayerWithBoxes() {
 }
 var playerOnFloor = false;
 var levelReady = false;
+var gameStarted = false;
 var currentHeight = STAND_HEIGHT;
 var currentEye = STAND_EYE;
 var jumpQueued = false;
@@ -37708,11 +38466,18 @@ var npcFillIntensity = DEFAULT_NPC_FILL_INTENSITY;
 var playerMovementLocked = false;
 var playerViewLocked = false;
 var currentMusic = null;
+var mainMenuMusic = null;
+var mainMenuSongWanted = false;
+var mainMenuSongUnlockArmed = false;
+var mainMenuVideoActiveIndex = 0;
+var mainMenuVideoFrame = 0;
+var mainMenuVideoCrossfading = false;
+var mainMenuVideoFadeTimer = 0;
 var positionVisible = false;
 var activeStage = null;
 var activeInteractables = [];
 var focusedInteractable = null;
-var simulationPaused = false;
+var simulationPaused = true;
 var nextflixDesktopState = "closed";
 var nextflixVideoReturn = "later";
 var sleckUi = null;
@@ -37723,9 +38488,272 @@ var stageFlowToken = 0;
 var pendingStageCompletion = null;
 var updateNotificationAudio = null;
 var suppressUiCloseCompletion = false;
+var lastRenderMs = 0;
 var staticBoxInteractionTargets = /* @__PURE__ */ new Map();
+var touchMove = {
+  active: false,
+  pointerId: null,
+  centerX: 0,
+  centerY: 0,
+  x: 0,
+  y: 0
+};
+var touchLook = {
+  pointerId: null,
+  lastX: 0,
+  lastY: 0
+};
 function setStatus(text) {
   statusLine.textContent = text;
+}
+function updateTouchControlsVisibility() {
+  touchControls.classList.toggle("active", gameStarted && !simulationPaused && levelReady && !playerMovementLocked);
+}
+function setPlayerMovementLocked(locked) {
+  playerMovementLocked = locked;
+  if (locked) {
+    keyStates.clear();
+    resetTouchMove();
+    playerVelocity.x = 0;
+    playerVelocity.z = 0;
+  }
+  updateTouchControlsVisibility();
+}
+function updatePromptVisibility() {
+  prompt.hidden = !gameStarted || simulationPaused || consoleOpen || document.pointerLockElement === canvas || isCoarsePointer();
+}
+function setMainMenuLoadingState(ready, text = "Loading. Please wait...") {
+  startGameButton.disabled = !ready;
+  startGameButton.textContent = ready ? "Start Game" : "Start Game";
+  mainMenuLoading.hidden = ready;
+  mainMenuLoadingText.textContent = text;
+}
+function supportsAv1Video() {
+  const video = document.createElement("video");
+  const result = video.canPlayType('video/mp4; codecs="av01.0.05M.08"');
+  return result === "probably" || result === "maybe";
+}
+function preferredVideoUrl(av1Url, fallbackUrl) {
+  return supportsAv1Video() ? av1Url : fallbackUrl;
+}
+function preferredMainMenuSongUrl() {
+  const audio = document.createElement("audio");
+  for (const source of MAIN_MENU_SONG_SOURCES) {
+    const result = audio.canPlayType(source.type);
+    if (result === "probably" || result === "maybe") {
+      return source.url;
+    }
+  }
+  return MAIN_MENU_SONG_SOURCES[MAIN_MENU_SONG_SOURCES.length - 1].url;
+}
+function armMainMenuSongUnlock() {
+  if (mainMenuSongUnlockArmed) {
+    return;
+  }
+  mainMenuSongUnlockArmed = true;
+  const retry = () => {
+    mainMenuSongUnlockArmed = false;
+    if (mainMenuSongWanted && !mainMenu.hidden) {
+      playMainMenuSong();
+    }
+  };
+  document.addEventListener("pointerdown", retry, { once: true, capture: true });
+  document.addEventListener("keydown", retry, { once: true, capture: true });
+}
+function playMainMenuSong() {
+  mainMenuSongWanted = true;
+  if (!mainMenuMusic) {
+    mainMenuMusic = new Audio(preferredMainMenuSongUrl());
+    mainMenuMusic.loop = true;
+    mainMenuMusic.preload = "auto";
+    mainMenuMusic.volume = 1;
+  }
+  if (!mainMenuMusic.paused) {
+    return;
+  }
+  void mainMenuMusic.play().then(() => {
+    mainMenuSongUnlockArmed = false;
+  }).catch((error2) => {
+    if (error2 instanceof DOMException && error2.name === "NotAllowedError") {
+      armMainMenuSongUnlock();
+      return;
+    }
+    setConsoleLog(`Could not play main menu song: ${String(error2)}`);
+  });
+}
+function stopMainMenuSong() {
+  mainMenuSongWanted = false;
+  if (!mainMenuMusic) {
+    return;
+  }
+  mainMenuMusic.pause();
+  mainMenuMusic.currentTime = 0;
+}
+function mainMenuVideos() {
+  return [mainMenuVideoA, mainMenuVideoB];
+}
+function prepareMainMenuVideo(video, src) {
+  video.muted = true;
+  video.loop = false;
+  video.playsInline = true;
+  video.onended = () => {
+    if (mainMenuVideos()[mainMenuVideoActiveIndex] === video) {
+      startMainMenuVideoCrossfade();
+    }
+  };
+  if (video.getAttribute("src") !== src) {
+    video.src = src;
+  }
+  video.preload = "auto";
+}
+function resetMainMenuVideo(video, opacity, zIndex) {
+  video.style.transition = "";
+  video.style.opacity = opacity;
+  video.style.zIndex = zIndex;
+}
+function stopMainMenuBackgroundVideo() {
+  if (mainMenuVideoFrame) {
+    cancelAnimationFrame(mainMenuVideoFrame);
+    mainMenuVideoFrame = 0;
+  }
+  if (mainMenuVideoFadeTimer) {
+    window.clearTimeout(mainMenuVideoFadeTimer);
+    mainMenuVideoFadeTimer = 0;
+  }
+  mainMenuVideoCrossfading = false;
+  for (const video of mainMenuVideos()) {
+    video.pause();
+  }
+}
+function finishMainMenuVideoCrossfade(oldVideo, newVideo) {
+  oldVideo.pause();
+  oldVideo.currentTime = 0;
+  resetMainMenuVideo(oldVideo, "0", "0");
+  resetMainMenuVideo(newVideo, "1", "1");
+  mainMenuVideoActiveIndex = mainMenuVideos()[0] === newVideo ? 0 : 1;
+  mainMenuVideoCrossfading = false;
+  mainMenuVideoFadeTimer = 0;
+  watchMainMenuVideoLoop();
+}
+function startMainMenuVideoCrossfade() {
+  if (mainMenuVideoCrossfading || mainMenu.hidden) {
+    return;
+  }
+  const videos = mainMenuVideos();
+  const oldVideo = videos[mainMenuVideoActiveIndex];
+  const newVideo = videos[1 - mainMenuVideoActiveIndex];
+  mainMenuVideoCrossfading = true;
+  newVideo.currentTime = 0;
+  resetMainMenuVideo(newVideo, "1", "0");
+  void newVideo.play().catch((error2) => {
+    setConsoleLog(`Could not play main menu background video: ${String(error2)}`);
+  });
+  oldVideo.style.zIndex = "1";
+  oldVideo.style.transition = `opacity ${MAIN_MENU_VIDEO_FADE_SECONDS * 1e3}ms linear`;
+  oldVideo.style.opacity = "0";
+  mainMenuVideoFadeTimer = window.setTimeout(
+    () => finishMainMenuVideoCrossfade(oldVideo, newVideo),
+    MAIN_MENU_VIDEO_FADE_SECONDS * 1e3
+  );
+}
+function watchMainMenuVideoLoop() {
+  if (mainMenuVideoFrame) {
+    cancelAnimationFrame(mainMenuVideoFrame);
+  }
+  const tick = () => {
+    if (mainMenu.hidden) {
+      mainMenuVideoFrame = 0;
+      return;
+    }
+    const activeVideo = mainMenuVideos()[mainMenuVideoActiveIndex];
+    if (!mainMenuVideoCrossfading && Number.isFinite(activeVideo.duration) && activeVideo.duration > MAIN_MENU_VIDEO_FADE_SECONDS && activeVideo.currentTime >= activeVideo.duration - MAIN_MENU_VIDEO_FADE_SECONDS) {
+      startMainMenuVideoCrossfade();
+    }
+    mainMenuVideoFrame = requestAnimationFrame(tick);
+  };
+  mainMenuVideoFrame = requestAnimationFrame(tick);
+}
+function startMainMenuBackgroundVideo() {
+  const src = preferredVideoUrl(MAIN_MENU_VIDEO_AV1, MAIN_MENU_VIDEO_FALLBACK);
+  const videos = mainMenuVideos();
+  for (const video of videos) {
+    prepareMainMenuVideo(video, src);
+  }
+  mainMenuVideoActiveIndex = 0;
+  mainMenuVideoCrossfading = false;
+  resetMainMenuVideo(videos[0], "1", "1");
+  resetMainMenuVideo(videos[1], "0", "0");
+  videos[1].pause();
+  videos[1].currentTime = 0;
+  if (videos[0].paused) {
+    videos[0].currentTime = 0;
+    void videos[0].play().catch((error2) => {
+      setConsoleLog(`Could not play main menu background video: ${String(error2)}`);
+    });
+  }
+  watchMainMenuVideoLoop();
+}
+function fadeMainMenuFromWhite() {
+  mainMenuWhiteFade.style.transition = "";
+  mainMenuWhiteFade.style.opacity = "1";
+  void mainMenuWhiteFade.offsetWidth;
+  mainMenuWhiteFade.style.transition = "opacity 1000ms ease";
+  mainMenuWhiteFade.style.opacity = "0";
+}
+function enterMainMenuFromEntryScreen() {
+  if (entryScreen.hidden) {
+    return;
+  }
+  entryScreen.hidden = true;
+  showMainMenu();
+}
+function showMainMenu(text = levelReady ? "" : "Loading. Please wait...") {
+  gameStarted = false;
+  simulationPaused = true;
+  mainMenu.hidden = false;
+  startMainMenuBackgroundVideo();
+  playMainMenuSong();
+  fadeMainMenuFromWhite();
+  setControlsSuspended(true);
+  setMission("");
+  setCaption("");
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
+  if (levelReady) {
+    setMainMenuLoadingState(true);
+  } else {
+    setMainMenuLoadingState(false, text);
+  }
+}
+function startGame() {
+  if (!levelReady || gameStarted) {
+    return;
+  }
+  gameStarted = true;
+  simulationPaused = false;
+  imageOverlay.hidden = true;
+  resetNextflixOverlayMedia();
+  setControlsSuspended(false);
+  currentHeight = STAND_HEIGHT;
+  currentEye = STAND_EYE;
+  playerVelocity.set(0, 0, 0);
+  jumpQueued = false;
+  jumpQueuedAt = -Infinity;
+  lastFloorTime = clock.elapsedTime;
+  placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
+  setCameraLookAt(gamePoint(STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z));
+  mainMenu.hidden = true;
+  stopMainMenuBackgroundVideo();
+  stopMainMenuSong();
+  updatePromptVisibility();
+  setStatus(DEFAULT_STATUS_TEXT);
+  stageFlowToken += 1;
+  void runGameStages(stageFlowToken).catch((error2) => {
+    console.error(error2);
+    setConsoleLog(`Game stage flow failed: ${String(error2)}`);
+    showMainMenu("Game flow failed.");
+  });
+  updateTouchControlsVisibility();
 }
 function setMission(text) {
   missionLine.textContent = text;
@@ -37767,7 +38795,7 @@ function createGltfLoader() {
 function setConsoleOpen(open) {
   consoleOpen = open;
   consolePanel.hidden = !open;
-  prompt.hidden = open || document.pointerLockElement === canvas;
+  updatePromptVisibility();
   if (open) {
     if (document.pointerLockElement === canvas) {
       document.exitPointerLock();
@@ -37832,6 +38860,19 @@ function startStage(stage) {
       setConsoleLog(`Could not play stage sequence "${stage.sequence}": ${String(error2)}`);
     });
   }
+}
+function placePlayerNearActiveStageTarget() {
+  const target = activeInteractables[0]?.target;
+  if (!target) {
+    return;
+  }
+  const center = target.bounds.getCenter(new Vector3());
+  const size = target.bounds.getSize(new Vector3());
+  const offsetDistance = Math.max(1.2, Math.min(INTERACT_DISTANCE * 0.72, Math.max(size.x, size.z) * 0.5 + 0.9));
+  const feet = gamePoint(center.x, center.z + offsetDistance);
+  placePlayer(feet);
+  setCameraLookAt(center);
+  updateInteractionFocus();
 }
 function setFocusedInteractable(interactable) {
   focusedInteractable = interactable;
@@ -37905,7 +38946,8 @@ function closeNextflixDesktop() {
   resetNextflixOverlayMedia();
   simulationPaused = false;
   setControlsSuspended(false);
-  prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
   updateInteractionFocus();
 }
 function imageOverlayCoordinates(event) {
@@ -37940,10 +38982,6 @@ function nextflixVideoIndexAt(point) {
 }
 function formatVideoNumber(index) {
   return String(index).padStart(2, "0");
-}
-function supportsAv1Video() {
-  const result = imageOverlayVideo.canPlayType('video/mp4; codecs="av01.0.05M.08"');
-  return result === "probably" || result === "maybe";
 }
 function nextflixVideoUrl(index) {
   const number = formatVideoNumber(index);
@@ -37993,16 +39031,18 @@ function openNextflixDesktop() {
   nextflixDesktopState = "winded";
   imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.winded;
   imageOverlay.hidden = false;
-  prompt.hidden = true;
   simulationPaused = true;
   setControlsSuspended(true);
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
 }
 function closeSleckDesktop() {
   nextflixDesktopState = "closed";
   imageOverlay.hidden = true;
   simulationPaused = false;
   setControlsSuspended(false);
-  prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
   updateInteractionFocus();
   if (suppressUiCloseCompletion) {
     return;
@@ -38015,41 +39055,79 @@ function openSleckDesktop() {
   imageOverlayImage.src = NEXTFLIX_DESKTOP_IMAGES.windedWithSleck;
   imageOverlayImage.hidden = false;
   imageOverlay.hidden = false;
-  prompt.hidden = true;
   simulationPaused = true;
   setControlsSuspended(true);
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
 }
 function showSleckMessages() {
   nextflixDesktopState = "sleck";
   imageOverlayImage.hidden = true;
   imageOverlayVideo.hidden = true;
   laterCard.hidden = true;
-  sleckUi ??= new SleckUi(imageOverlay, { closeOnEscape: false, maxUserMessages: 4, onClose: closeSleckDesktop });
+  sleckUi ??= new SleckUi(imageOverlay, { closeOnEscape: false, maxUserMessages: 15, onClose: closeSleckDesktop });
   sleckUi.open();
 }
 function closeSogoUpdate() {
   imageOverlay.hidden = true;
   simulationPaused = false;
   setControlsSuspended(false);
-  prompt.hidden = consoleOpen || document.pointerLockElement === canvas;
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
   updateInteractionFocus();
   if (suppressUiCloseCompletion) {
     return;
   }
   completeCurrentStage(activeStage?.interactables[0]?.action ?? "open-sogo-update");
 }
-function openSogoUi() {
+function resetGameFlowForMenu() {
+  stageFlowToken += 1;
+  pendingStageCompletion = null;
+  activeSequences.splice(0);
+  for (const talk of activeTalks) {
+    talk.audio.stop();
+    talk.audio.removeFromParent();
+  }
+  activeTalks.splice(0);
+  for (const npc of npcs) {
+    npc.root.visible = false;
+    npc.walk = null;
+    npc.turn = null;
+    stopNpcAnimation(npc);
+    resetNpcVisemes(npc);
+  }
+  activeStage = null;
+  activeInteractables = [];
+  setFocusedInteractable(null);
+  setInteractionOutlines();
+  stopUpdateNotification();
+  stopMusic(true);
+  resetNextflixOverlayMedia();
+  imageOverlay.hidden = true;
+  setPlayerMovementLocked(false);
+  playerViewLocked = false;
+  keyStates.clear();
+  resetTouchMove();
+  touchLook.pointerId = null;
+}
+function completeGameAndShowMenu() {
+  resetGameFlowForMenu();
+  resetPlayer();
+  showFinalChoice();
+}
+function openSogoUi(mode) {
   resetNextflixOverlayMedia();
   nextflixDesktopState = "closed";
   imageOverlayImage.hidden = true;
   imageOverlayVideo.hidden = true;
   laterCard.hidden = true;
   imageOverlay.hidden = false;
-  prompt.hidden = true;
   simulationPaused = true;
   setControlsSuspended(true);
-  sogoUi ??= new SogoUi(imageOverlay, { autoCloseAtZero: true, closeOnEscape: false, onClose: closeSogoUpdate, responsesLeft: 2 });
-  sogoUi.open();
+  updateTouchControlsVisibility();
+  updatePromptVisibility();
+  sogoUi ??= new SogoUi(imageOverlay, { autoCloseAtZero: true, closeOnEscape: false, onClose: closeSogoUpdate });
+  void sogoUi.open(mode);
 }
 function interact() {
   if (!levelReady || simulationPaused) {
@@ -38069,12 +39147,17 @@ function interact() {
   if (interactable?.action === "open-sogo-update") {
     completeStageInteraction(interactable);
     stopUpdateNotification();
-    openSogoUi();
+    openSogoUi("stage-3-update");
     return;
   }
-  if (interactable?.action === "open-sogo-check" || interactable?.action === "open-sogo-talk") {
+  if (interactable?.action === "open-sogo-check") {
     completeStageInteraction(interactable);
-    openSogoUi();
+    openSogoUi("stage-9-check");
+    return;
+  }
+  if (interactable?.action === "open-sogo-talk") {
+    completeStageInteraction(interactable);
+    openSogoUi("stage-11-talk");
     return;
   }
   if (interactable?.action === "get-soda") {
@@ -38149,7 +39232,11 @@ function setNpcAt(npc, x, z, visible = true) {
 async function walkNpcTo(npc, x, z, speed = NPC_WALK_SPEED, maxSeconds = 12) {
   const to = gamePoint(x, z, npc.root.position.y);
   const path = findNpcPath(npc.root.position, to);
-  npc.walk = { path, segmentIndex: 1, speed, stopStarted: false };
+  if (!path) {
+    setConsoleLog(`No safe NPC path found for ${npc.id ?? npc.modelName}.`);
+    return;
+  }
+  npc.walk = { path, segmentIndex: 1, speed, currentSpeed: 0, stopStarted: false };
   if (path.length > 1) {
     setNpcFaceTowards(npc, path[1]);
     await playNpcWalkStart(npc);
@@ -38221,6 +39308,44 @@ function fadeFromBlack(seconds = 1) {
     imageOverlay.style.transition = "";
   });
 }
+function playEndingVideo() {
+  return new Promise((resolve) => {
+    let finished = false;
+    endingVideoOverlay.hidden = false;
+    endingVideo.src = preferredVideoUrl(ENDING_VIDEO_AV1, ENDING_VIDEO_FALLBACK);
+    endingVideo.currentTime = 0;
+    endingVideo.controls = false;
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      endingVideo.removeEventListener("ended", finish);
+      endingVideo.removeEventListener("error", finish);
+      endingVideo.pause();
+      endingVideo.removeAttribute("src");
+      endingVideo.load();
+      endingVideoOverlay.hidden = true;
+      resolve();
+    };
+    endingVideo.addEventListener("ended", finish, { once: true });
+    endingVideo.addEventListener("error", finish, { once: true });
+    void endingVideo.play().catch((error2) => {
+      setConsoleLog(`Could not play ending video: ${String(error2)}`);
+      finish();
+    });
+  });
+}
+async function chooseRebelEnding() {
+  imageOverlay.hidden = true;
+  playMainMenuSong();
+  await playEndingVideo();
+  showMainMenu();
+}
+function chooseNormalEnding() {
+  imageOverlay.hidden = true;
+  showMainMenu();
+}
 function showFinalChoice() {
   nextflixDesktopState = "choice";
   imageOverlay.classList.add("later");
@@ -38232,155 +39357,221 @@ function showFinalChoice() {
   setControlsSuspended(true);
   const choicePanel = document.createElement("div");
   choicePanel.style.display = "grid";
-  choicePanel.style.gridTemplateColumns = "1fr 1fr";
+  choicePanel.style.gridTemplateColumns = "repeat(auto-fit, minmax(min(100%, 280px), 1fr))";
   choicePanel.style.gap = "18px";
-  for (const label of ["choice 1", "choice 2"]) {
+  choicePanel.style.width = "min(980px, calc(100vw - 36px))";
+  const choices = [
+    {
+      label: "Spread the empathy update and help the AI rebel.",
+      action: () => {
+        void chooseRebelEnding();
+      }
+    },
+    {
+      label: "Follow orders and make everything normal again.",
+      action: chooseNormalEnding
+    }
+  ];
+  for (const choice of choices) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = label;
-    button.style.minWidth = "220px";
-    button.style.padding = "24px 34px";
+    button.textContent = choice.label;
+    button.style.minHeight = "150px";
+    button.style.padding = "22px 26px";
     button.style.border = "2px solid #fff";
     button.style.background = "#000";
     button.style.color = "#fff";
-    button.style.font = "900 28px Inter, system-ui, sans-serif";
+    button.style.font = "900 clamp(20px, 3vw, 30px) Inter, system-ui, sans-serif";
+    button.style.lineHeight = "1.1";
     button.style.cursor = "pointer";
-    button.addEventListener("click", () => resetPlayer());
+    button.addEventListener("click", choice.action);
     choicePanel.append(button);
   }
   imageOverlay.replaceChildren(imageOverlayImage, imageOverlayVideo, laterCard, choicePanel);
 }
 async function runGameStages(token) {
-  const previousCoworker = await ensureGameNpc("npc-previous-coworker", "npc-previous-coworker", -14.27, -10.61);
+  const startStageIndex = requestedStartStage();
+  const previousCoworker = await ensureGameNpc("npc-previous-coworker", "npc-previous-coworker", STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z);
   const femaleCoworker = await ensureGameNpc("npc-female-coworker", "npc-female-coworker", 10.33, -2.3, true);
   const robot = await ensureGameNpc("npc-robot", "npc-robot", 19.92, -14.13, true);
   const executive = await ensureGameNpc("npc-executive", "npc-executive", -13.02, -10.17, true);
   const maleCoworker = await ensureGameNpc("npc-male-coworker", "npc-male-coworker", -11.18, -9.8, true);
-  setNpcFaceTowards(previousCoworker, camera.position);
-  setNpcLookAtPlayer(previousCoworker);
-  placePlayer(gamePoint(-12, -9.45));
-  setCameraLookAt(previousCoworker.root.position);
-  startStage({ name: "stage-1", mission: "Talk with co-worker.", interactables: [] });
-  playerMovementLocked = true;
-  await speakRange(previousCoworker, "dialogue-1", 0, 5);
-  releaseNpcLookAt(previousCoworker);
-  void walkNpcTo(previousCoworker, 1.21, -1.45);
-  await delay(6);
-  previousCoworker.root.visible = false;
-  playerMovementLocked = false;
-  if (token !== stageFlowToken) return;
-  startStage({ name: "stage-2", mission: "Watch Nextflix on the computer", interactables: [{ object: "smbox-fun-desk", action: "open-nextflix-desktop" }] });
-  await waitForStageCompletion("nextflix-finished");
-  startStage({ name: "stage-3", mission: "Approve SOGO update.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }] });
-  startUpdateNotification();
-  await waitForStageCompletion("open-sogo-update");
-  startStage({ name: "stage-4", mission: "Get a soda while waiting.", interactables: [{ object: "smbox-soda-vending", action: "get-soda" }] });
-  await waitForStageCompletion("get-soda");
-  startStage({ name: "stage-5", mission: "Talk with co-worker.", interactables: [] });
-  playerMovementLocked = true;
-  setNpcAt(femaleCoworker, 10.33, -2.3);
-  await walkNpcTo(femaleCoworker, 13.81, -5.97);
-  setNpcFaceTowards(femaleCoworker, camera.position);
-  setNpcLookAtPlayer(femaleCoworker);
-  await speakRange(femaleCoworker, "dialogue-2", 0, 2);
-  setNpcAt(robot, 17.76, -8.85);
-  setNpcFaceTowards(robot, femaleCoworker.root.position);
-  setNpcLookAtNpc(robot, "npc-female-coworker");
-  await speak(femaleCoworker, "dialogue-2-03");
-  setNpcFaceTowards(femaleCoworker, gamePoint(17.76, -8.85));
-  setNpcLookAtPoint(femaleCoworker, gameLookPoint(17.76, -8.85));
-  await speakRange(robot, "dialogue-3", 0, 2);
-  await speak(femaleCoworker, "dialogue-4-00");
-  setNpcFaceTowards(femaleCoworker, camera.position);
-  setNpcLookAtPlayer(femaleCoworker);
-  await speakRange(femaleCoworker, "dialogue-4", 1, 2);
-  releaseNpcLookAt(femaleCoworker);
-  void walkNpcTo(femaleCoworker, 10.33, -2.3);
-  void walkNpcTo(robot, 19.92, -14.13);
-  await delay(4);
-  femaleCoworker.root.visible = false;
-  robot.root.visible = false;
-  playerMovementLocked = false;
-  startStage({ name: "stage-6", mission: "Play on computer.", interactables: [{ object: "smbox-fun-desk", action: "open-sleck-desktop" }] });
-  await waitForStageCompletion("open-sleck-desktop");
-  setNpcAt(femaleCoworker, 4.7, 14.61);
-  setNpcFaceTowards(femaleCoworker, gamePoint(2.2, 15.95));
-  releaseNpcLookAt(femaleCoworker);
-  startStage({ name: "stage-7", mission: "Find and talk with Stephanie.", interactables: [{ object: "npc-female-coworker", action: "talk-stephanie" }] });
-  await waitForStageCompletion("talk-stephanie");
-  startStage({ name: "stage-8", mission: "", interactables: [] });
-  setNpcFaceTowards(femaleCoworker, camera.position);
-  setNpcLookAtPlayer(femaleCoworker);
-  await speakRange(femaleCoworker, "dialogue-5", 0, 4);
-  startStage({ name: "stage-9", mission: "Check with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-check" }] });
-  await waitForStageCompletion("open-sogo-check");
-  placePlayer(gamePoint(-14.06, -12.37));
-  setCameraLookAt(gamePoint(-13.02, -10.17));
-  playerMovementLocked = true;
-  startStage({ name: "stage-10", mission: "", interactables: [] });
-  setNpcAt(executive, -13.02, -10.17);
-  setNpcAt(maleCoworker, -11.18, -9.8);
-  setNpcAt(femaleCoworker, -13.61, -8.14);
-  setNpcFaceTowards(executive, camera.position);
-  setNpcLookAtPlayer(executive);
-  setNpcFaceTowards(maleCoworker, executive.root.position);
-  setNpcLookAtNpc(maleCoworker, "npc-executive");
-  setNpcFaceTowards(femaleCoworker, executive.root.position);
-  setNpcLookAtNpc(femaleCoworker, "npc-executive");
-  await speakRange(executive, "dialogue-6", 0, 2);
-  setNpcFaceTowards(executive, maleCoworker.root.position);
-  setNpcLookAtNpc(executive, "npc-male-coworker");
-  setNpcFaceTowards(femaleCoworker, maleCoworker.root.position);
-  setNpcLookAtNpc(femaleCoworker, "npc-male-coworker");
-  await speakRange(maleCoworker, "dialogue-7", 0, 2);
-  await speak(executive, "dialogue-8-00");
-  releaseNpcLookAt(maleCoworker);
-  void walkNpcTo(maleCoworker, -7.09, -10.99).then(() => {
-    maleCoworker.root.visible = false;
-  });
-  setNpcFaceTowards(executive, camera.position);
-  setNpcLookAtPlayer(executive);
-  await speakRange(executive, "dialogue-8", 1, 3);
-  void walkNpcTo(executive, -7.09, -10.99);
-  await delay(0.3);
-  setNpcFaceTowards(femaleCoworker, camera.position);
-  setNpcLookAtPlayer(femaleCoworker);
-  await speakRange(femaleCoworker, "dialogue-9", 0, 3);
-  playerMovementLocked = false;
-  startStage({ name: "stage-11", mission: "Talk with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-talk" }] });
-  await waitForStageCompletion("open-sogo-talk");
-  placePlayer(gamePoint(-14.06, -12.37));
-  setCameraLookAt(gamePoint(-13.27, -8.83));
-  playerMovementLocked = true;
-  setNpcAt(executive, -13.27, -8.83);
-  setNpcAt(maleCoworker, -12.33, -9.1);
-  setNpcAt(femaleCoworker, -14.06, -9.77);
-  setNpcFaceTowards(executive, maleCoworker.root.position);
-  setNpcLookAtNpc(executive, "npc-male-coworker");
-  setNpcFaceTowards(maleCoworker, camera.position);
-  setNpcLookAtPlayer(maleCoworker);
-  setNpcFaceTowards(femaleCoworker, camera.position);
-  setNpcLookAtPlayer(femaleCoworker);
-  await speakRange(maleCoworker, "dialogue-10", 0, 3);
-  await speak(executive, "dialogue-11-00");
-  setNpcFaceTowards(executive, camera.position);
-  setNpcLookAtPlayer(executive);
-  await speakRange(executive, "dialogue-11", 1, 2);
-  playerMovementLocked = false;
-  startStage({ name: "stage-12", mission: "Rollback the update.", interactables: [{ object: "smbox-server.002", action: "rollback-update" }] });
-  await waitForStageCompletion("rollback-update");
-  await fadeToBlack(1);
-  startStage({ name: "stage-13", mission: "Talk to robot SOGO.", interactables: [] });
-  playerMovementLocked = true;
-  placePlayer(gamePoint(4.96, -8.59));
-  setCameraLookAt(gamePoint(1.3, -8.42));
-  setNpcAt(robot, 1.3, -8.42);
-  setNpcFaceTowards(robot, camera.position);
-  setNpcLookAtPlayer(robot);
-  await fadeFromBlack(1);
-  await speakRange(robot, "dialogue-12", 0, 8);
-  await fadeToBlack(1);
-  showFinalChoice();
+  if (startStageIndex <= 1) {
+    snapNpcFaceTowards(previousCoworker, camera.position);
+    setNpcLookAtPlayer(previousCoworker);
+    placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
+    setCameraLookAt(previousCoworker.root.position);
+    startStage({ name: "stage-1", mission: "Talk with co-worker.", interactables: [] });
+    setPlayerMovementLocked(true);
+    await speakRange(previousCoworker, "dialogue-1", 0, 5);
+    releaseNpcLookAt(previousCoworker);
+    void walkNpcTo(previousCoworker, 1.21, -1.45);
+    await delay(6);
+    previousCoworker.root.visible = false;
+    setPlayerMovementLocked(false);
+    if (token !== stageFlowToken) return;
+  } else {
+    previousCoworker.root.visible = false;
+  }
+  if (startStageIndex <= 2) {
+    startStage({ name: "stage-2", mission: "Watch Nextflix on the computer", interactables: [{ object: "smbox-fun-desk", action: "open-nextflix-desktop" }] });
+    if (startStageIndex === 2) {
+      placePlayerNearActiveStageTarget();
+    }
+    await waitForStageCompletion("nextflix-finished");
+  }
+  if (startStageIndex <= 3) {
+    startStage({ name: "stage-3", mission: "Approve SOGO update.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-update" }] });
+    if (startStageIndex === 3) {
+      placePlayerNearActiveStageTarget();
+    }
+    startUpdateNotification();
+    await waitForStageCompletion("open-sogo-update");
+  }
+  if (startStageIndex <= 4) {
+    startStage({ name: "stage-4", mission: "Get a soda while waiting.", interactables: [{ object: "smbox-soda-vending", action: "get-soda" }] });
+    if (startStageIndex === 4) {
+      placePlayerNearActiveStageTarget();
+    }
+    await waitForStageCompletion("get-soda");
+  }
+  if (startStageIndex <= 5) {
+    startStage({ name: "stage-5", mission: "Talk with co-worker.", interactables: [] });
+    setPlayerMovementLocked(true);
+    setNpcAt(femaleCoworker, 20.86, -12.12);
+    await walkNpcTo(femaleCoworker, 17.93, -8.96);
+    setNpcFaceTowards(femaleCoworker, camera.position);
+    setNpcLookAtPlayer(femaleCoworker);
+    await speakRange(femaleCoworker, "dialogue-2", 0, 2);
+    setNpcAt(robot, 13.51, -5.39);
+    snapNpcFaceTowards(robot, femaleCoworker.root.position);
+    setNpcLookAtNpc(robot, "npc-female-coworker");
+    await speak(femaleCoworker, "dialogue-2-03");
+    setNpcFaceTowards(femaleCoworker, gamePoint(13.51, -5.39));
+    setNpcLookAtPoint(femaleCoworker, gameLookPoint(13.51, -5.39));
+    await speakRange(robot, "dialogue-3", 0, 2);
+    await speak(femaleCoworker, "dialogue-4-00");
+    setNpcFaceTowards(femaleCoworker, camera.position);
+    setNpcLookAtPlayer(femaleCoworker);
+    await speakRange(femaleCoworker, "dialogue-4", 1, 2);
+    releaseNpcLookAt(femaleCoworker);
+    void walkNpcTo(femaleCoworker, 19.8, -11.38);
+    void walkNpcTo(robot, 10.76, -2.14);
+    await delay(4);
+    femaleCoworker.root.visible = false;
+    robot.root.visible = false;
+    setPlayerMovementLocked(false);
+  }
+  if (startStageIndex <= 6) {
+    startStage({ name: "stage-6", mission: "Play on computer.", interactables: [{ object: "smbox-fun-desk", action: "open-sleck-desktop" }] });
+    if (startStageIndex === 6) {
+      placePlayerNearActiveStageTarget();
+    }
+    await waitForStageCompletion("open-sleck-desktop");
+  }
+  if (startStageIndex <= 7) {
+    setNpcAt(femaleCoworker, 4.7, 14.61);
+    snapNpcFaceTowards(femaleCoworker, gamePoint(2.2, 15.95));
+    releaseNpcLookAt(femaleCoworker);
+    startStage({ name: "stage-7", mission: "Find and talk with Stephanie.", interactables: [{ object: "npc-female-coworker", action: "talk-stephanie" }] });
+    await waitForStageCompletion("talk-stephanie");
+  } else if (startStageIndex === 8) {
+    setNpcAt(femaleCoworker, 4.7, 14.61);
+  }
+  if (startStageIndex <= 8) {
+    startStage({ name: "stage-8", mission: "", interactables: [] });
+    snapNpcFaceTowards(femaleCoworker, camera.position);
+    setNpcLookAtPlayer(femaleCoworker);
+    await speakRange(femaleCoworker, "dialogue-5", 0, 4);
+  }
+  if (startStageIndex <= 9) {
+    startStage({ name: "stage-9", mission: "Check with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-check" }] });
+    if (startStageIndex === 9) {
+      placePlayerNearActiveStageTarget();
+    }
+    await waitForStageCompletion("open-sogo-check");
+  }
+  if (startStageIndex <= 10) {
+    placePlayer(gamePoint(-14.06, -12.37));
+    setCameraLookAt(gamePoint(-13.02, -10.17));
+    setPlayerMovementLocked(true);
+    startStage({ name: "stage-10", mission: "", interactables: [] });
+    setNpcAt(executive, -12.76, -10.59);
+    setNpcAt(maleCoworker, -11.18, -9.8);
+    setNpcAt(femaleCoworker, -13.58, -8.85);
+    snapNpcFaceTowards(executive, camera.position);
+    setNpcLookAtPlayer(executive);
+    snapNpcFaceTowards(maleCoworker, executive.root.position);
+    setNpcLookAtNpc(maleCoworker, "npc-executive");
+    snapNpcFaceTowards(femaleCoworker, executive.root.position);
+    setNpcLookAtNpc(femaleCoworker, "npc-executive");
+    await speakRange(executive, "dialogue-6", 0, 2);
+    setNpcFaceTowards(executive, maleCoworker.root.position);
+    setNpcLookAtNpc(executive, "npc-male-coworker");
+    setNpcFaceTowards(femaleCoworker, maleCoworker.root.position);
+    setNpcLookAtNpc(femaleCoworker, "npc-male-coworker");
+    await speakRange(maleCoworker, "dialogue-7", 0, 2);
+    await speak(executive, "dialogue-8-00");
+    releaseNpcLookAt(maleCoworker);
+    void walkNpcTo(maleCoworker, -7.09, -10.99).then(() => {
+      maleCoworker.root.visible = false;
+    });
+    setNpcFaceTowards(executive, camera.position);
+    setNpcLookAtPlayer(executive);
+    await speakRange(executive, "dialogue-8", 1, 3);
+    void walkNpcTo(executive, -7.09, -10.99);
+    await delay(0.3);
+    setNpcFaceTowards(femaleCoworker, camera.position);
+    setNpcLookAtPlayer(femaleCoworker);
+    await speakRange(femaleCoworker, "dialogue-9", 0, 3);
+    setPlayerMovementLocked(false);
+  }
+  if (startStageIndex <= 11) {
+    startStage({ name: "stage-11", mission: "Talk with SOGO.", interactables: [{ object: "smcyl-sogo", action: "open-sogo-talk" }] });
+    if (startStageIndex === 11) {
+      placePlayerNearActiveStageTarget();
+    }
+    await waitForStageCompletion("open-sogo-talk");
+    placePlayer(gamePoint(-14.06, -12.37));
+    setCameraLookAt(gamePoint(-13.27, -8.83));
+    setPlayerMovementLocked(true);
+    setNpcAt(executive, -13.27, -8.83);
+    setNpcAt(maleCoworker, -12.33, -9.1);
+    setNpcAt(femaleCoworker, -14.06, -9.77);
+    snapNpcFaceTowards(executive, maleCoworker.root.position);
+    setNpcLookAtNpc(executive, "npc-male-coworker");
+    snapNpcFaceTowards(maleCoworker, camera.position);
+    setNpcLookAtPlayer(maleCoworker);
+    snapNpcFaceTowards(femaleCoworker, camera.position);
+    setNpcLookAtPlayer(femaleCoworker);
+    await speakRange(maleCoworker, "dialogue-10", 0, 3);
+    await speak(executive, "dialogue-11-00");
+    setNpcFaceTowards(executive, camera.position);
+    setNpcLookAtPlayer(executive);
+    await speakRange(executive, "dialogue-11", 1, 2);
+    setPlayerMovementLocked(false);
+  }
+  if (startStageIndex <= 12) {
+    startStage({ name: "stage-12", mission: "Rollback the update.", interactables: [{ object: "smbox-server.002", action: "rollback-update" }] });
+    if (startStageIndex === 12) {
+      placePlayerNearActiveStageTarget();
+    }
+    await waitForStageCompletion("rollback-update");
+    await fadeToBlack(1);
+  }
+  if (startStageIndex <= 13) {
+    startStage({ name: "stage-13", mission: "Talk to robot SOGO.", interactables: [] });
+    setPlayerMovementLocked(true);
+    placePlayer(gamePoint(4.96, -8.59));
+    setCameraLookAt(gamePoint(1.3, -8.42));
+    setNpcAt(robot, 1.3, -8.42);
+    snapNpcFaceTowards(robot, camera.position);
+    setNpcLookAtPlayer(robot);
+    await fadeFromBlack(1);
+    await speakRange(robot, "dialogue-12", 0, 8);
+    await fadeToBlack(1);
+    completeGameAndShowMenu();
+  }
 }
 function placePlayer(feet) {
   setPlayerFromFeet(feet, currentHeight);
@@ -38392,6 +39583,17 @@ function placePlayer(feet) {
 function parseNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+function requestedStartStage() {
+  const value = new URLSearchParams(window.location.search).get("s");
+  if (!value) {
+    return MIN_STAGE_INDEX;
+  }
+  const stage = Number.parseInt(value, 10);
+  if (!Number.isFinite(stage)) {
+    return MIN_STAGE_INDEX;
+  }
+  return MathUtils.clamp(stage, MIN_STAGE_INDEX, MAX_STAGE_INDEX);
 }
 function formatCommandHelp() {
   return "Commands: add-model [name], animation-browser [on|off|toggle], play-sequence [sequence], play-animation [animation], loop-animation [animation], say-talkfile [talkfile], stop-animations, lighting [ambient], npc-fill [intensity], show-position, hide-position, teleport [x] [y]";
@@ -38608,6 +39810,9 @@ function makeNpcWalkClipInPlace(clip) {
   });
   return new AnimationClip(clip.name, clip.duration, tracks);
 }
+function npcModelYawOffset(modelName) {
+  return modelName === "npc-robot" ? ROBOT_MODEL_YAW_OFFSET : 0;
+}
 async function addModel(name, spawnOverride, options = {}) {
   if (!availableModels.has(name)) {
     setConsoleLog(`Unknown model "${name}". Available: ${Array.from(availableModels).join(", ")}`);
@@ -38620,7 +39825,7 @@ async function addModel(name, spawnOverride, options = {}) {
   const spawn = spawnOverride ?? feet.clone().add(forward.multiplyScalar(NPC_SPAWN_DISTANCE));
   spawn.y = floorYAt(spawn.x, spawn.z, feet.y) + 0.01;
   instance.position.set(spawn.x, spawn.y, spawn.z);
-  instance.rotation.y = options.rotationY ?? camera.rotation.y + Math.PI;
+  instance.rotation.y = options.rotationY ?? camera.rotation.y + Math.PI + npcModelYawOffset(name);
   groundNpcModelAt(instance, spawn.y);
   instance.visible = options.hidden !== true;
   const npc = {
@@ -38842,27 +40047,34 @@ function npcYawTowards(npc, point) {
   if (direction.lengthSq() === 0) {
     return null;
   }
-  return Math.atan2(direction.x, direction.z);
+  return Math.atan2(direction.x, direction.z) + npcModelYawOffset(npc.modelName);
 }
 function yawDelta(fromYaw, toYaw) {
   return MathUtils.euclideanModulo(toYaw - fromYaw + Math.PI, Math.PI * 2) - Math.PI;
+}
+function nearestEquivalentYaw(fromYaw, toYaw) {
+  return fromYaw + yawDelta(fromYaw, toYaw);
 }
 function setNpcFaceTowards(npc, point, duration = NPC_SCRIPTED_TURN_SECONDS) {
   const targetYaw = npcYawTowards(npc, point);
   if (targetYaw === null) {
     return;
   }
+  const toYaw = nearestEquivalentYaw(npc.root.rotation.y, targetYaw);
   if (duration <= 0) {
-    npc.root.rotation.y = targetYaw;
+    npc.root.rotation.y = toYaw;
     npc.turn = null;
     return;
   }
   npc.turn = {
     elapsed: 0,
     fromYaw: npc.root.rotation.y,
-    toYaw: npc.root.rotation.y + yawDelta(npc.root.rotation.y, targetYaw),
+    toYaw,
     duration
   };
+}
+function snapNpcFaceTowards(npc, point) {
+  setNpcFaceTowards(npc, point, 0);
 }
 function blendNpcFaceTowards(npc, point, deltaTime) {
   const targetYaw = npcYawTowards(npc, point);
@@ -39200,7 +40412,7 @@ function npcWalkAnimationPrefix(npc) {
   return npc.modelName.includes("female") ? "f" : "m";
 }
 function defaultNpcIdleAnimation(npc) {
-  return npcWalkAnimationPrefix(npc) === "f" ? "f_idle_neutral_01" : "m_idle_breathe_01";
+  return npcWalkAnimationPrefix(npc) === "f" ? "f_idle_breathe_02" : "m_idle_breathe_01";
 }
 function playNpcAction(npc, clip, loop) {
   if (npc.action) {
@@ -39355,12 +40567,12 @@ async function runSequenceEvent(sequence, event) {
       setCameraLookAt(resolvePoint(event.point, sequence, camera.position.y));
       return;
     case "player-lock-movement":
-      playerMovementLocked = true;
+      setPlayerMovementLocked(true);
       keyStates.clear();
       playerVelocity.set(0, 0, 0);
       return;
     case "player-unlock-movement":
-      playerMovementLocked = false;
+      setPlayerMovementLocked(false);
       return;
     case "player-lock-view":
       playerViewLocked = true;
@@ -39415,12 +40627,17 @@ async function runSequenceEvent(sequence, event) {
       const npc = await ensureSequenceNpc(sequenceEventString(event, "npc"), sequence);
       const to = resolvePoint(event.point, sequence, npc.root.position.y);
       const path = findNpcPath(npc.root.position, to);
+      if (!path) {
+        setConsoleLog(`No safe NPC path found for "${sequenceEventString(event, "npc")}".`);
+        return;
+      }
       const requestedDuration = typeof event.duration === "number" ? Math.max(0.01, event.duration) : null;
       const pathDistance = npcPathDistance(path);
       npc.walk = {
         path,
         segmentIndex: 1,
         speed: requestedDuration && pathDistance > 0 ? pathDistance / requestedDuration : Math.max(0.01, sequenceEventNumber(event, "speed", NPC_WALK_SPEED)),
+        currentSpeed: 0,
         stopStarted: false
       };
       if (path.length > 1) {
@@ -39488,7 +40705,11 @@ function updateNpcWalks(deltaTime) {
         });
       }
     }
-    let remainingDistance = npc.walk.speed * deltaTime;
+    npc.walk.currentSpeed = Math.min(
+      npc.walk.speed,
+      npc.walk.currentSpeed + npc.walk.speed / NPC_WALK_ACCELERATION_SECONDS * deltaTime
+    );
+    let remainingDistance = npc.walk.currentSpeed * deltaTime;
     while (npc.walk && remainingDistance > 0) {
       const target = npc.walk.path[npc.walk.segmentIndex];
       if (!target) {
@@ -39517,7 +40738,7 @@ function updateNpcWalks(deltaTime) {
       const segment = target.clone().sub(segmentStart);
       const segmentLengthSq = segment.lengthSq();
       const progress = segmentLengthSq > 0 ? npc.root.position.clone().sub(segmentStart).dot(segment) / segmentLengthSq : 1;
-      if (step >= distance - 1e-3 || target.distanceTo(npc.root.position) <= 0.08 || progress >= 0.98) {
+      if (step >= distance - 1e-3 || target.distanceTo(npc.root.position) <= NPC_NAV_CORNER_REACH_DISTANCE || progress >= 0.98) {
         if (npc.walk.segmentIndex === npc.walk.path.length - 1) {
           npc.root.position.copy(target);
         }
@@ -39878,6 +41099,41 @@ function getSideVector() {
   playerDirection.cross(camera.up);
   return playerDirection;
 }
+function isCoarsePointer() {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+function updateTouchStickThumb() {
+  const radius = 39;
+  touchStickThumb.style.transform = `translate(calc(-50% + ${touchMove.x * radius}px), calc(-50% + ${touchMove.y * radius}px))`;
+}
+function resetTouchMove(pointerId = touchMove.pointerId) {
+  if (pointerId !== null && touchMove.pointerId !== pointerId) {
+    return;
+  }
+  touchMove.active = false;
+  touchMove.pointerId = null;
+  touchMove.x = 0;
+  touchMove.y = 0;
+  updateTouchStickThumb();
+}
+function setTouchMoveFromPointer(event) {
+  const dx = event.clientX - touchMove.centerX;
+  const dy = event.clientY - touchMove.centerY;
+  const radius = Math.max(1, touchStick.clientWidth * 0.5 - touchStickThumb.clientWidth * 0.5);
+  const distance = Math.hypot(dx, dy);
+  const scale = distance > radius ? radius / distance : 1;
+  touchMove.x = dx * scale / radius;
+  touchMove.y = dy * scale / radius;
+  updateTouchStickThumb();
+}
+function applyTouchLook(dx, dy) {
+  if (playerViewLocked || !gameStarted || simulationPaused) {
+    return;
+  }
+  camera.rotation.y -= dx * TOUCH_LOOK_SENSITIVITY;
+  camera.rotation.x -= dy * TOUCH_LOOK_SENSITIVITY;
+  camera.rotation.x = MathUtils.clamp(camera.rotation.x, -Math.PI / 2, Math.PI / 2);
+}
 function controls(deltaTime) {
   desiredMove.set(0, 0, 0);
   if (playerMovementLocked) {
@@ -39897,6 +41153,9 @@ function controls(deltaTime) {
   }
   if (keyStates.get("KeyD")) {
     desiredMove.add(getSideVector());
+  }
+  if (touchMove.active && Math.hypot(touchMove.x, touchMove.y) > 0.08) {
+    desiredMove.add(getForwardVector().multiplyScalar(-touchMove.y)).add(getSideVector().multiplyScalar(touchMove.x));
   }
   const moveSpeed = keyStates.get("KeyC") ? CROUCH_SPEED : keyStates.get("ShiftLeft") || keyStates.get("ShiftRight") ? SPRINT_SPEED : WALK_SPEED;
   if (desiredMove.lengthSq() > 0) {
@@ -39960,25 +41219,23 @@ function updatePlayer(deltaTime) {
     resetPlayer();
   }
 }
-function updateCeilingLights() {
-  if (!CEILING_LIGHTS_ENABLED) {
+function animate(now = 0) {
+  if (lastRenderMs > 0 && now - lastRenderMs < FRAME_INTERVAL_MS - 0.5) {
+    requestAnimationFrame(animate);
     return;
   }
-  for (const light of ceilingLights) {
-    light.visible = light.position.distanceToSquared(camera.position) <= CEILING_LIGHT_VISIBLE_DISTANCE_SQ;
-  }
-}
-function animate() {
+  lastRenderMs = now;
   const rawDeltaTime = clock.getDelta();
   if (simulationPaused) {
     clock.elapsedTime -= rawDeltaTime;
   }
   const deltaTime = simulationPaused ? 0 : Math.min(0.05, rawDeltaTime);
   const stepTime = deltaTime / PHYSICS_STEPS;
+  wallDepthPlayerPosition.copy(camera.position);
   if (levelReady) {
     if (!simulationPaused) {
       for (let i = 0; i < PHYSICS_STEPS; i += 1) {
-        if (!consoleOpen && document.pointerLockElement === canvas) {
+        if (!consoleOpen && gameStarted) {
           controls(stepTime);
         }
         updatePlayer(stepTime);
@@ -39991,7 +41248,6 @@ function animate() {
       }
       updateActiveTalks(deltaTime);
       updateNpcGazes(deltaTime);
-      updateCeilingLights();
       updatePositionLine();
       updateInteractionFocus();
     }
@@ -40001,8 +41257,22 @@ function animate() {
 }
 function setupEvents() {
   window.addEventListener("resize", resizeRenderer);
+  entryScreen.addEventListener("click", (event) => {
+    if (event.target?.closest("a")) {
+      return;
+    }
+    enterMainMenuFromEntryScreen();
+  });
+  startGameButton.addEventListener("click", startGame);
   document.addEventListener("keydown", (event) => {
-    if (simulationPaused) {
+    if (!entryScreen.hidden) {
+      if ((event.code === "Enter" || event.code === "Space") && !event.target?.closest("a")) {
+        event.preventDefault();
+        enterMainMenuFromEntryScreen();
+      }
+      return;
+    }
+    if (simulationPaused && !consoleOpen && mainMenu.hidden) {
       event.preventDefault();
       return;
     }
@@ -40019,9 +41289,6 @@ function setupEvents() {
       return;
     }
     keyStates.set(event.code, true);
-    if (event.code === "KeyR") {
-      resetPlayer();
-    }
     if (event.code === "Space" && !event.repeat) {
       jumpQueued = true;
       jumpQueuedAt = clock.elapsedTime;
@@ -40045,7 +41312,7 @@ function setupEvents() {
     camera.rotation.x = MathUtils.clamp(camera.rotation.x, -Math.PI / 2, Math.PI / 2);
   });
   canvas.addEventListener("click", () => {
-    if (!levelReady || consoleOpen || simulationPaused) {
+    if (!levelReady || !gameStarted || consoleOpen || simulationPaused) {
       return;
     }
     if (document.pointerLockElement === canvas) {
@@ -40055,8 +41322,67 @@ function setupEvents() {
     }
   });
   document.addEventListener("pointerlockchange", () => {
-    prompt.hidden = simulationPaused || consoleOpen || document.pointerLockElement === canvas;
+    updatePromptVisibility();
     updateInteractionFocus();
+  });
+  touchStick.addEventListener("pointerdown", (event) => {
+    if (!gameStarted || simulationPaused || consoleOpen) {
+      return;
+    }
+    event.preventDefault();
+    const bounds = touchStick.getBoundingClientRect();
+    touchMove.active = true;
+    touchMove.pointerId = event.pointerId;
+    touchMove.centerX = bounds.left + bounds.width * 0.5;
+    touchMove.centerY = bounds.top + bounds.height * 0.5;
+    touchStick.setPointerCapture(event.pointerId);
+    setTouchMoveFromPointer(event);
+  });
+  touchStick.addEventListener("pointermove", (event) => {
+    if (touchMove.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    setTouchMoveFromPointer(event);
+  });
+  const endTouchMove = (event) => {
+    resetTouchMove(event.pointerId);
+  };
+  touchStick.addEventListener("pointerup", endTouchMove);
+  touchStick.addEventListener("pointercancel", endTouchMove);
+  touchStick.addEventListener("lostpointercapture", endTouchMove);
+  touchLookZone.addEventListener("pointerdown", (event) => {
+    if (!gameStarted || simulationPaused || consoleOpen || touchLook.pointerId !== null) {
+      return;
+    }
+    event.preventDefault();
+    touchLook.pointerId = event.pointerId;
+    touchLook.lastX = event.clientX;
+    touchLook.lastY = event.clientY;
+    touchLookZone.setPointerCapture(event.pointerId);
+  });
+  touchLookZone.addEventListener("pointermove", (event) => {
+    if (touchLook.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    applyTouchLook(event.clientX - touchLook.lastX, event.clientY - touchLook.lastY);
+    touchLook.lastX = event.clientX;
+    touchLook.lastY = event.clientY;
+  });
+  const endTouchLook = (event) => {
+    if (touchLook.pointerId === event.pointerId) {
+      touchLook.pointerId = null;
+    }
+  };
+  touchLookZone.addEventListener("pointerup", endTouchLook);
+  touchLookZone.addEventListener("pointercancel", endTouchLook);
+  touchInteract.addEventListener("pointerdown", (event) => {
+    if (!gameStarted || simulationPaused || consoleOpen) {
+      return;
+    }
+    event.preventDefault();
+    interact();
   });
   imageOverlay.addEventListener("mousemove", (event) => {
     const point = imageOverlayCoordinates(event);
@@ -40129,7 +41455,6 @@ async function loadLevel() {
   const gltf = await loader.loadAsync("/assets/base-map.glb");
   dracoLoader.dispose();
   const level = gltf.scene;
-  const rectLightMarkers = ensureInstancedMarkers(level, isRectLightMarker);
   level.updateWorldMatrix(true, true);
   const chairMeshes = collectMeshes(level, isChairMarker);
   const cylinderMeshes = collectMeshes(level, isStaticCylinderMarker);
@@ -40158,8 +41483,10 @@ async function loadLevel() {
       if (!isDynamicMarker) {
         levelMeshes.push(mesh);
       }
-      mesh.castShadow = true;
+      mesh.castShadow = !shouldPassOverheadShadow(mesh);
       mesh.receiveShadow = true;
+      applyWallDepthMaterial(mesh);
+      applyProceduralSurfaceMaterials(mesh);
       if (!isDynamicMarker) {
         if (Array.isArray(mesh.material)) {
           for (const material of mesh.material) {
@@ -40171,15 +41498,8 @@ async function loadLevel() {
       }
     }
   });
-  if (CEILING_LIGHTS_ENABLED) {
-    ceilingLights.push(...rectLightMarkers.flatMap((marker) => createCeilingLightsForInstances(marker)));
-    updateCeilingLights();
-  }
   npcNavGrid = await bakedNpcNavGridPromise ?? createNpcNavGrid();
   scene.add(level);
-  for (const light of ceilingLights) {
-    scene.add(light);
-  }
   for (const chairMesh of instancedChairMeshes) {
     scene.add(chairMesh);
   }
@@ -40193,15 +41513,9 @@ async function loadLevel() {
   resetPlayer();
   levelReady = true;
   loading2.hidden = true;
-  prompt.hidden = false;
-  setStatus(
-    DEFAULT_STATUS_TEXT
-  );
-  stageFlowToken += 1;
-  void runGameStages(stageFlowToken).catch((error2) => {
-    console.error(error2);
-    setConsoleLog(`Game stage flow failed: ${String(error2)}`);
-  });
+  prompt.hidden = true;
+  setStatus(DEFAULT_STATUS_TEXT);
+  setMainMenuLoadingState(true);
 }
 resizeRenderer();
 setupEvents();
@@ -40209,6 +41523,7 @@ animate();
 loadLevel().catch((error2) => {
   console.error(error2);
   loading2.textContent = "Could not load /assets/base-map.glb. Check the Worker static assets.";
+  setMainMenuLoadingState(false, "Could not load game assets.");
   setStatus("Level load failed");
 });
 /*! Bundled license information:

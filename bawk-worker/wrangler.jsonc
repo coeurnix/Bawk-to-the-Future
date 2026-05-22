@@ -18,7 +18,15 @@
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "bawk_use_db",
+			"database_name": "bawk_use_db",
+			"database_id": "b85fbd53-622d-4591-a960-b563b7884f4b",
+			"remote": true
+		}
+	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
