@@ -58,7 +58,7 @@ const MAX_STEPHANIE_OUTPUT_TOKENS = 120;
 const MAX_STEPHANIE_USER_MESSAGES = 10;
 const GPT54_USAGE_TABLE = "gpt54_token_usage";
 const GPT54_TOKEN_WINDOW_MS = 24 * 60 * 60 * 1000;
-const GPT54_TOKEN_LIMIT = 200_000;
+const GPT54_TOKEN_LIMIT = 500_000;
 const GPT54_USAGE_CLEANUP_RATE = 0.02;
 const SOGO_DEVELOPER_PROMPT = `You are SOGO 11, the omnimodal operating intelligence of the Pandora Meridian Complex, a 99% automated broiler production facility operated by Pandora Farms and built with SuperGoodTech.
 

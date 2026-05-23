@@ -38581,6 +38581,21 @@ function setPlayerMovementLocked(locked) {
 function updatePromptVisibility() {
   prompt.hidden = !gameStarted || simulationPaused || consoleOpen || document.pointerLockElement === canvas || isCoarsePointer();
 }
+function requestGamePointerLock() {
+  if (isCoarsePointer() || document.pointerLockElement === canvas) {
+    return;
+  }
+  try {
+    const result = canvas.requestPointerLock();
+    if (result) {
+      void result.catch(() => {
+        updatePromptVisibility();
+      });
+    }
+  } catch {
+    updatePromptVisibility();
+  }
+}
 function setMainMenuLoadingState(ready, text = "Loading. Please wait...") {
   startGameButton.disabled = !ready;
   startGameButton.textContent = ready ? "Start Game" : "Start Game";
@@ -38807,10 +38822,11 @@ function startGame() {
   if (!levelReady || gameStarted) {
     return;
   }
+  requestGamePointerLock();
   gameStarted = true;
   simulationPaused = false;
-  imageOverlay.hidden = true;
   resetNextflixOverlayMedia();
+  showBlackScreen();
   setControlsSuspended(false);
   currentHeight = STAND_HEIGHT;
   currentEye = STAND_EYE;
@@ -38821,13 +38837,12 @@ function startGame() {
   placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
   setCameraLookAt(gamePoint(STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z));
   mainMenu.hidden = true;
-  void fadeFromBlack(1);
   stopMainMenuBackgroundVideo();
   stopMainMenuSong();
   updatePromptVisibility();
   setStatus(DEFAULT_STATUS_TEXT);
   stageFlowToken += 1;
-  void runGameStages(stageFlowToken).catch((error2) => {
+  void startGameStagesAfterFade(stageFlowToken).catch((error2) => {
     console.error(error2);
     setConsoleLog(`Game stage flow failed: ${String(error2)}`);
     showMainMenu("Game flow failed.");
@@ -39391,6 +39406,16 @@ function fadeToBlack(seconds = 1) {
   imageOverlay.style.opacity = "1";
   return delay(seconds);
 }
+function showBlackScreen() {
+  imageOverlay.classList.remove("fading");
+  imageOverlay.classList.add("later");
+  imageOverlay.hidden = false;
+  imageOverlayImage.hidden = true;
+  imageOverlayVideo.hidden = true;
+  laterCard.hidden = true;
+  imageOverlay.style.transition = "";
+  imageOverlay.style.opacity = "1";
+}
 function fadeFromBlack(seconds = 1) {
   imageOverlay.classList.remove("fading");
   imageOverlay.classList.add("later");
@@ -39489,6 +39514,30 @@ function showFinalChoice() {
     choicePanel.append(button);
   }
   imageOverlay.replaceChildren(imageOverlayImage, imageOverlayVideo, laterCard, choicePanel);
+}
+async function prepareInitialGameNpcs() {
+  const previousCoworker = await ensureGameNpc("npc-previous-coworker", "npc-previous-coworker", STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z);
+  await Promise.all([
+    ensureGameNpc("npc-female-coworker", "npc-female-coworker", 10.33, -2.3, true),
+    ensureGameNpc("npc-robot", "npc-robot", 19.92, -14.13, true),
+    ensureGameNpc("npc-executive", "npc-executive", -13.02, -10.17, true),
+    ensureGameNpc("npc-male-coworker", "npc-male-coworker", -11.18, -9.8, true)
+  ]);
+  snapNpcFaceTowards(previousCoworker, camera.position);
+  setNpcLookAtPlayer(previousCoworker);
+  previousCoworker.mixer.update(0);
+  return previousCoworker;
+}
+async function startGameStagesAfterFade(token) {
+  await prepareInitialGameNpcs();
+  if (token !== stageFlowToken) {
+    return;
+  }
+  await fadeFromBlack(1);
+  if (token !== stageFlowToken) {
+    return;
+  }
+  await runGameStages(token);
 }
 async function runGameStages(token) {
   const startStageIndex = requestedStartStage();
@@ -39942,7 +39991,7 @@ async function addModel(name, spawnOverride, options = {}) {
     turn: null,
     walk: null
   };
-  await setNpcIdleAnimation(npc, defaultNpcIdleAnimation(npc));
+  await setNpcIdleAnimation(npc, defaultNpcIdleAnimation(npc), { instant: true });
   scene.add(instance);
   npcs.push(npc);
   if (npc.id) {
@@ -40487,7 +40536,7 @@ function stopMusic(fadeOut) {
   audio.pause();
   audio.currentTime = 0;
 }
-async function setNpcIdleAnimation(npc, animation) {
+async function setNpcIdleAnimation(npc, animation, options = {}) {
   npc.idleAnimation = animation;
   const clip = await loadAnimationClip(animation);
   const action = npc.mixer.clipAction(clip, npc.root);
@@ -40495,8 +40544,15 @@ async function setNpcIdleAnimation(npc, animation) {
   if (npc.idleAction === action) {
     action.enabled = true;
     action.setLoop(LoopRepeat, Infinity);
-    action.fadeIn(ANIMATION_BLEND_SECONDS);
+    if (options.instant) {
+      action.setEffectiveWeight(1);
+    } else {
+      action.fadeIn(ANIMATION_BLEND_SECONDS);
+    }
     action.play();
+    if (options.instant) {
+      npc.mixer.update(0);
+    }
     return;
   }
   if (npc.idleAction) {
@@ -40505,9 +40561,16 @@ async function setNpcIdleAnimation(npc, animation) {
   action.reset();
   action.enabled = true;
   action.setLoop(LoopRepeat, Infinity);
-  action.fadeIn(ANIMATION_BLEND_SECONDS);
+  if (options.instant) {
+    action.setEffectiveWeight(1);
+  } else {
+    action.fadeIn(ANIMATION_BLEND_SECONDS);
+  }
   action.play();
   npc.idleAction = action;
+  if (options.instant) {
+    npc.mixer.update(0);
+  }
 }
 function npcWalkAnimationPrefix(npc) {
   return npc.modelName.includes("female") ? "f" : "m";

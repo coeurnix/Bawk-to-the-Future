@@ -1,9 +1,17 @@
 # Bawk to the Future
 
-...
+This is a game made for Token Game Jam 1 (https://itch.io/jam/token-jam-1). I was interested in experimenting with several AI techs for this game (video gen, 3D gen, etc.) while playing around a theme of AI empathy. There are a few things about this game that might be interesting to other developers/designers.
+
+First, it doesn't use a proper game engine, just three.js and custom code. In these days of AI, this is fairly easy to do, but optimization required a fair bit of experimentation and change. The current system is, IMO, quite well-optimized for 3D web game, running smoothly on a MediaTek Dimensity 6300 despite having animated 3D humans, lip-sync, etc.
+
+Second, the lipsync was a fun miniproject in this that takes a WAV and script, uses rhubarb visemes and specific rocketbox mouth morphs to reasonably emulate talking. Once in place, this made getting the models to "speak" very easy.
+
+Third, for map generation I had GPT 5.5 directly create a Blender Python to match a floorplan image I gave it. I was surprised and impressed with the detailed model it made, though it did require some clean up.
+
+I personally am one of those weirdos who find a certain charm in AI video absurdities, so I deliberately "allowed" some surreal elements to remain in the Nextflix videos. Players should probably just be thankful I replaced my original LTX 2.3 drafts with Grok Imagine ones! ;)
+
 
 # Credits
-
 
 ## Three.js 3D library (MIT)
 
