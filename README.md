@@ -10,6 +10,8 @@ Third, for map generation I had GPT 5.5 directly create a Blender Python to matc
 
 I personally am one of those weirdos who find a certain charm in AI video absurdities, so I deliberately "allowed" some surreal elements to remain in the Nextflix videos. Players should probably just be thankful I replaced my original LTX 2.3 drafts with Grok Imagine ones! ;)
 
+In my opinion, the most significant weakness of the game is the generated 3D models, for which I used Tripo (I like the RocketBox models a lot, but those were hand-made). I think there are so many nuanced yet vital aspects to 3D design and modeling, that we are still quite a bit from professional-quality model design. I actually believe the gpt->blender style pipeline (i.e., constructive, tool-based, etc.) is probably the "right" route rather than the diffusion model approach. Definitely be an interesting area to watch over the next couple years.
+
 
 # Credits
 
