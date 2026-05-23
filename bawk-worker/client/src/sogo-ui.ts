@@ -79,7 +79,7 @@ const SOGO_MODES: Record<
 		initialAudioUrl: STAGE_9_SOGO_AUDIO_URL,
 		initialResponseText: STAGE_9_SOGO_RESPONSE_TEXT,
 		initialSuggestionText: "",
-		responsesLeft: 5,
+		responsesLeft: 3,
 	},
 	"stage-11-talk": {
 		finalAudioUrl: STAGE_11_FINAL_SOGO_AUDIO_URL,
@@ -87,7 +87,7 @@ const SOGO_MODES: Record<
 		initialAudioUrl: STAGE_11_SOGO_AUDIO_URL,
 		initialResponseText: STAGE_11_SOGO_RESPONSE_TEXT,
 		initialSuggestionText: "",
-		responsesLeft: 5,
+		responsesLeft: 3,
 	},
 };
 
@@ -380,7 +380,7 @@ export class SogoUi {
 		this.finished = document.createElement("button");
 		this.finished.className = "sogo-finished";
 		this.finished.type = "button";
-		this.finished.textContent = "Finished";
+		this.finished.textContent = "Click to Continue";
 		this.finished.hidden = true;
 
 		const context = this.visualizer.getContext("2d");

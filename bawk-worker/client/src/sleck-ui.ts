@@ -269,7 +269,7 @@ export class SleckUi {
 		this.finished = document.createElement("button");
 		this.finished.className = "sleck-finished";
 		this.finished.type = "button";
-		this.finished.textContent = "Finished";
+		this.finished.textContent = "Click to Continue";
 		this.finished.hidden = true;
 
 		this.root.append(this.messagesNode, this.input, this.send, this.finished);
@@ -300,6 +300,11 @@ export class SleckUi {
 				if (this.closeOnEscape) {
 					this.close();
 				}
+			}
+		});
+		this.root.addEventListener("click", () => {
+			if (this.ended) {
+				this.close();
 			}
 		});
 		this.render();

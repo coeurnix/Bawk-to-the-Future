@@ -36330,7 +36330,7 @@ var SleckUi = class {
     this.finished = document.createElement("button");
     this.finished.className = "sleck-finished";
     this.finished.type = "button";
-    this.finished.textContent = "Finished";
+    this.finished.textContent = "Click to Continue";
     this.finished.hidden = true;
     this.root.append(this.messagesNode, this.input, this.send, this.finished);
     parent.append(this.root);
@@ -36359,6 +36359,11 @@ var SleckUi = class {
         if (this.closeOnEscape) {
           this.close();
         }
+      }
+    });
+    this.root.addEventListener("click", () => {
+      if (this.ended) {
+        this.close();
       }
     });
     this.render();
@@ -36583,7 +36588,7 @@ var SOGO_MODES = {
     initialAudioUrl: STAGE_9_SOGO_AUDIO_URL,
     initialResponseText: STAGE_9_SOGO_RESPONSE_TEXT,
     initialSuggestionText: "",
-    responsesLeft: 5
+    responsesLeft: 3
   },
   "stage-11-talk": {
     finalAudioUrl: STAGE_11_FINAL_SOGO_AUDIO_URL,
@@ -36591,7 +36596,7 @@ var SOGO_MODES = {
     initialAudioUrl: STAGE_11_SOGO_AUDIO_URL,
     initialResponseText: STAGE_11_SOGO_RESPONSE_TEXT,
     initialSuggestionText: "",
-    responsesLeft: 5
+    responsesLeft: 3
   }
 };
 var stylesInstalled2 = false;
@@ -36878,7 +36883,7 @@ var SogoUi = class {
     this.finished = document.createElement("button");
     this.finished.className = "sogo-finished";
     this.finished.type = "button";
-    this.finished.textContent = "Finished";
+    this.finished.textContent = "Click to Continue";
     this.finished.hidden = true;
     const context = this.visualizer.getContext("2d");
     if (!context) {
@@ -37407,7 +37412,7 @@ var WALL_DEPTH_MATERIAL_NAMES = /* @__PURE__ */ new Set([
 ]);
 var WALL_DEPTH_NEAR = 5.5;
 var WALL_DEPTH_FAR = 31;
-var WALL_DEPTH_STRENGTH = 0.46;
+var WALL_DEPTH_STRENGTH = 0.56;
 var CEILING_TILE_MESH_NAME = "CEILING_TILES_MERGED";
 var CEILING_TILE_MATERIAL_NAME = "Ceiling_Tile_Tiling_Material";
 var FLOOR_TILE_MESH_NAME = "FLOOR_TILES_MERGED";
@@ -37537,7 +37542,7 @@ renderer.outputColorSpace = SRGBColorSpace;
 var scene = new Scene();
 scene.background = new Color(1448221);
 scene.fog = new Fog(1448221, 35, 85);
-var camera = new PerspectiveCamera(60, 1, 0.05, 250);
+var camera = new PerspectiveCamera(50, 1, 0.05, 250);
 camera.rotation.order = "YXZ";
 var ambientLight = new AmbientLight(16777215, DEFAULT_AMBIENT_INTENSITY);
 scene.add(ambientLight);
@@ -37774,12 +37779,17 @@ varying vec3 vBawkWallWorldNormal;`
 float bawkWallDistance = length(vBawkWallWorldPosition.xz - bawkWallPlayerPosition.xz);
 float bawkWallDistanceMix = smoothstep(bawkWallNear, bawkWallFar, bawkWallDistance);
 float bawkWallDepthShade = mix(1.0, 1.0 - bawkWallStrength, bawkWallDistanceMix);
-float bawkWallFacingShade = clamp(0.98 + bawkWallNormal.z * 0.055 - bawkWallNormal.x * 0.035, 0.9, 1.08);
-gl_FragColor.rgb *= bawkWallDepthShade * bawkWallFacingShade;
+float bawkWallFacingShade = clamp(0.99 + bawkWallNormal.z * 0.075 - bawkWallNormal.x * 0.052, 0.86, 1.1);
+float bawkWallGrain =
+	sin(vBawkWallWorldPosition.x * 1.7 + vBawkWallWorldPosition.y * 4.1) +
+	sin(vBawkWallWorldPosition.z * 2.3 - vBawkWallWorldPosition.y * 3.4) +
+	sin((vBawkWallWorldPosition.x + vBawkWallWorldPosition.z) * 3.1);
+float bawkWallSurfaceShade = clamp(1.0 + bawkWallGrain * 0.014, 0.95, 1.045);
+gl_FragColor.rgb *= bawkWallDepthShade * bawkWallFacingShade * bawkWallSurfaceShade;
 #include <dithering_fragment>`
     );
   };
-  wallMaterial.customProgramCacheKey = () => "bawk-wall-depth-v1";
+  wallMaterial.customProgramCacheKey = () => "bawk-wall-depth-v2";
   wallMaterial.needsUpdate = true;
   return wallMaterial;
 }
@@ -38003,6 +38013,53 @@ function registerStaticInteractionTarget(mesh) {
     staticBoxInteractionTargets.set(staticInteractionKey(mesh.name), target);
   }
   scene.add(helper);
+}
+function npcInteractionKey(npc) {
+  return npc.id ?? npc.modelName;
+}
+function npcInteractionBounds(npc) {
+  const bounds = new Box3().setFromObject(npc.root);
+  if (bounds.isEmpty()) {
+    const center = npc.root.position.clone().add(new Vector3(0, 1.05, 0));
+    bounds.setFromCenterAndSize(center, new Vector3(1.1, 2.1, 1.1));
+  }
+  const size = bounds.getSize(new Vector3());
+  if (size.y < 1.8) {
+    const center = bounds.getCenter(new Vector3());
+    bounds.setFromCenterAndSize(center, new Vector3(Math.max(size.x, 0.9), 2, Math.max(size.z, 0.9)));
+  }
+  return bounds.expandByScalar(0.08);
+}
+function ensureNpcInteractionTarget(npc) {
+  const key = npcInteractionKey(npc);
+  const existing = npcInteractionTargets.get(key);
+  if (existing) {
+    existing.bounds.copy(npcInteractionBounds(npc));
+    return existing;
+  }
+  const bounds = npcInteractionBounds(npc);
+  const helper = new Box3Helper(bounds, 16765514);
+  helper.name = `${key}-interaction-outline`;
+  helper.visible = false;
+  helper.material.depthTest = false;
+  helper.renderOrder = 1e3;
+  const target = { name: key, bounds, helper };
+  npcInteractionTargets.set(key, target);
+  scene.add(helper);
+  return target;
+}
+function updateNpcInteractionOutlines() {
+  for (const [key, target] of npcInteractionTargets) {
+    if (!target.helper.visible) {
+      continue;
+    }
+    const npc = npcsById.get(key) ?? npcs.find((candidate) => candidate.modelName === key);
+    if (!npc?.root.visible) {
+      target.helper.visible = false;
+      continue;
+    }
+    target.bounds.copy(npcInteractionBounds(npc));
+  }
 }
 function isFloorPlacementSurface(object) {
   const name = object.name.toLowerCase();
@@ -38491,6 +38548,7 @@ var updateNotificationAudio = null;
 var suppressUiCloseCompletion = false;
 var lastRenderMs = 0;
 var staticBoxInteractionTargets = /* @__PURE__ */ new Map();
+var npcInteractionTargets = /* @__PURE__ */ new Map();
 var touchMove = {
   active: false,
   pointerId: null,
@@ -38763,6 +38821,7 @@ function startGame() {
   placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
   setCameraLookAt(gamePoint(STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z));
   mainMenu.hidden = true;
+  void fadeFromBlack(1);
   stopMainMenuBackgroundVideo();
   stopMainMenuSong();
   updatePromptVisibility();
@@ -38851,15 +38910,31 @@ function setInteractionOutlines() {
   for (const target of staticBoxInteractionTargets.values()) {
     target.helper.visible = false;
   }
+  for (const target of npcInteractionTargets.values()) {
+    target.helper.visible = false;
+  }
   for (const interactable of activeInteractables) {
     if (interactable.target) {
       interactable.target.helper.visible = true;
+      continue;
+    }
+    const npc = npcsById.get(interactable.object);
+    if (npc?.root.visible) {
+      ensureNpcInteractionTarget(npc).helper.visible = true;
     }
   }
 }
 function completeStageInteraction(interactable) {
   if (interactable.target) {
     interactable.target.helper.visible = false;
+  } else {
+    const npc = npcsById.get(interactable.object);
+    if (npc) {
+      const target = npcInteractionTargets.get(npcInteractionKey(npc));
+      if (target) {
+        target.helper.visible = false;
+      }
+    }
   }
   activeInteractables = activeInteractables.filter((candidate) => candidate !== interactable);
   setFocusedInteractable(null);
@@ -38945,8 +39020,18 @@ function resetNextflixOverlayMedia() {
   window.clearTimeout(laterFadeTimer);
   laterCardTimer = 0;
   laterFadeTimer = 0;
+  suppressUiCloseCompletion = true;
+  sleckUi?.close();
+  sogoUi?.close();
+  suppressUiCloseCompletion = false;
+  sleckUi = null;
+  sogoUi = null;
+  imageOverlay.replaceChildren(imageOverlayImage, imageOverlayVideo, laterCard);
   nextflixVideoReturn = "later";
+  nextflixDesktopState = "closed";
   imageOverlay.classList.remove("later", "fading");
+  imageOverlay.style.opacity = "";
+  imageOverlay.style.transition = "";
   imageOverlayImage.hidden = false;
   imageOverlayImage.removeAttribute("src");
   imageOverlayVideo.pause();
@@ -38954,10 +39039,6 @@ function resetNextflixOverlayMedia() {
   imageOverlayVideo.load();
   imageOverlayVideo.hidden = true;
   laterCard.hidden = true;
-  suppressUiCloseCompletion = true;
-  sleckUi?.close();
-  sogoUi?.close();
-  suppressUiCloseCompletion = false;
   imageOverlay.style.cursor = "";
 }
 function closeNextflixDesktop() {
@@ -41270,6 +41351,7 @@ function animate(now = 0) {
       updateNpcGazes(deltaTime);
       updatePositionLine();
       updateInteractionFocus();
+      updateNpcInteractionOutlines();
     }
   }
   renderer.render(scene, camera);

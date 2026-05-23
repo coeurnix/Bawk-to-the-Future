@@ -50,7 +50,7 @@ const WALL_DEPTH_MATERIAL_NAMES = new Set([
 ]);
 const WALL_DEPTH_NEAR = 5.5;
 const WALL_DEPTH_FAR = 31;
-const WALL_DEPTH_STRENGTH = 0.46;
+const WALL_DEPTH_STRENGTH = 0.56;
 const CEILING_TILE_MESH_NAME = "CEILING_TILES_MERGED";
 const CEILING_TILE_MATERIAL_NAME = "Ceiling_Tile_Tiling_Material";
 const FLOOR_TILE_MESH_NAME = "FLOOR_TILES_MERGED";
@@ -222,7 +222,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x16191d);
 scene.fog = new THREE.Fog(0x16191d, 35, 85);
 
-const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 250);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 250);
 camera.rotation.order = "YXZ";
 
 const ambientLight = new THREE.AmbientLight(0xffffff, DEFAULT_AMBIENT_INTENSITY);
@@ -543,12 +543,17 @@ varying vec3 vBawkWallWorldNormal;`,
 float bawkWallDistance = length(vBawkWallWorldPosition.xz - bawkWallPlayerPosition.xz);
 float bawkWallDistanceMix = smoothstep(bawkWallNear, bawkWallFar, bawkWallDistance);
 float bawkWallDepthShade = mix(1.0, 1.0 - bawkWallStrength, bawkWallDistanceMix);
-float bawkWallFacingShade = clamp(0.98 + bawkWallNormal.z * 0.055 - bawkWallNormal.x * 0.035, 0.9, 1.08);
-gl_FragColor.rgb *= bawkWallDepthShade * bawkWallFacingShade;
+float bawkWallFacingShade = clamp(0.99 + bawkWallNormal.z * 0.075 - bawkWallNormal.x * 0.052, 0.86, 1.1);
+float bawkWallGrain =
+	sin(vBawkWallWorldPosition.x * 1.7 + vBawkWallWorldPosition.y * 4.1) +
+	sin(vBawkWallWorldPosition.z * 2.3 - vBawkWallWorldPosition.y * 3.4) +
+	sin((vBawkWallWorldPosition.x + vBawkWallWorldPosition.z) * 3.1);
+float bawkWallSurfaceShade = clamp(1.0 + bawkWallGrain * 0.014, 0.95, 1.045);
+gl_FragColor.rgb *= bawkWallDepthShade * bawkWallFacingShade * bawkWallSurfaceShade;
 #include <dithering_fragment>`,
 			);
 	};
-	wallMaterial.customProgramCacheKey = () => "bawk-wall-depth-v1";
+	wallMaterial.customProgramCacheKey = () => "bawk-wall-depth-v2";
 	wallMaterial.needsUpdate = true;
 	return wallMaterial;
 }
@@ -815,6 +820,57 @@ function registerStaticInteractionTarget(mesh: THREE.Mesh) {
 		staticBoxInteractionTargets.set(staticInteractionKey(mesh.name), target);
 	}
 	scene.add(helper);
+}
+
+function npcInteractionKey(npc: NpcInstance) {
+	return npc.id ?? npc.modelName;
+}
+
+function npcInteractionBounds(npc: NpcInstance) {
+	const bounds = new THREE.Box3().setFromObject(npc.root);
+	if (bounds.isEmpty()) {
+		const center = npc.root.position.clone().add(new THREE.Vector3(0, 1.05, 0));
+		bounds.setFromCenterAndSize(center, new THREE.Vector3(1.1, 2.1, 1.1));
+	}
+	const size = bounds.getSize(new THREE.Vector3());
+	if (size.y < 1.8) {
+		const center = bounds.getCenter(new THREE.Vector3());
+		bounds.setFromCenterAndSize(center, new THREE.Vector3(Math.max(size.x, 0.9), 2.0, Math.max(size.z, 0.9)));
+	}
+	return bounds.expandByScalar(0.08);
+}
+
+function ensureNpcInteractionTarget(npc: NpcInstance) {
+	const key = npcInteractionKey(npc);
+	const existing = npcInteractionTargets.get(key);
+	if (existing) {
+		existing.bounds.copy(npcInteractionBounds(npc));
+		return existing;
+	}
+	const bounds = npcInteractionBounds(npc);
+	const helper = new THREE.Box3Helper(bounds, 0xffd24a);
+	helper.name = `${key}-interaction-outline`;
+	helper.visible = false;
+	helper.material.depthTest = false;
+	helper.renderOrder = 1000;
+	const target = { name: key, bounds, helper };
+	npcInteractionTargets.set(key, target);
+	scene.add(helper);
+	return target;
+}
+
+function updateNpcInteractionOutlines() {
+	for (const [key, target] of npcInteractionTargets) {
+		if (!target.helper.visible) {
+			continue;
+		}
+		const npc = npcsById.get(key) ?? npcs.find((candidate) => candidate.modelName === key);
+		if (!npc?.root.visible) {
+			target.helper.visible = false;
+			continue;
+		}
+		target.bounds.copy(npcInteractionBounds(npc));
+	}
 }
 
 function isFloorPlacementSurface(object: THREE.Object3D) {
@@ -1598,6 +1654,7 @@ let updateNotificationAudio: HTMLAudioElement | null = null;
 let suppressUiCloseCompletion = false;
 let lastRenderMs = 0;
 const staticBoxInteractionTargets = new Map<string, StaticBoxInteractionTarget>();
+const npcInteractionTargets = new Map<string, StaticBoxInteractionTarget>();
 const touchMove: TouchMoveState = {
 	active: false,
 	pointerId: null,
@@ -1903,6 +1960,7 @@ function startGame() {
 	placePlayer(gamePoint(STAGE_1_PLAYER_X, STAGE_1_PLAYER_Z));
 	setCameraLookAt(gamePoint(STAGE_1_COWORKER_X, STAGE_1_COWORKER_Z));
 	mainMenu.hidden = true;
+	void fadeFromBlack(1);
 	stopMainMenuBackgroundVideo();
 	stopMainMenuSong();
 	updatePromptVisibility();
@@ -2007,9 +2065,17 @@ function setInteractionOutlines() {
 	for (const target of staticBoxInteractionTargets.values()) {
 		target.helper.visible = false;
 	}
+	for (const target of npcInteractionTargets.values()) {
+		target.helper.visible = false;
+	}
 	for (const interactable of activeInteractables) {
 		if (interactable.target) {
 			interactable.target.helper.visible = true;
+			continue;
+		}
+		const npc = npcsById.get(interactable.object);
+		if (npc?.root.visible) {
+			ensureNpcInteractionTarget(npc).helper.visible = true;
 		}
 	}
 }
@@ -2017,6 +2083,14 @@ function setInteractionOutlines() {
 function completeStageInteraction(interactable: ActiveInteractable) {
 	if (interactable.target) {
 		interactable.target.helper.visible = false;
+	} else {
+		const npc = npcsById.get(interactable.object);
+		if (npc) {
+			const target = npcInteractionTargets.get(npcInteractionKey(npc));
+			if (target) {
+				target.helper.visible = false;
+			}
+		}
 	}
 	activeInteractables = activeInteractables.filter((candidate) => candidate !== interactable);
 	setFocusedInteractable(null);
@@ -2113,8 +2187,18 @@ function resetNextflixOverlayMedia() {
 	window.clearTimeout(laterFadeTimer);
 	laterCardTimer = 0;
 	laterFadeTimer = 0;
+	suppressUiCloseCompletion = true;
+	sleckUi?.close();
+	sogoUi?.close();
+	suppressUiCloseCompletion = false;
+	sleckUi = null;
+	sogoUi = null;
+	imageOverlay.replaceChildren(imageOverlayImage, imageOverlayVideo, laterCard);
 	nextflixVideoReturn = "later";
+	nextflixDesktopState = "closed";
 	imageOverlay.classList.remove("later", "fading");
+	imageOverlay.style.opacity = "";
+	imageOverlay.style.transition = "";
 	imageOverlayImage.hidden = false;
 	imageOverlayImage.removeAttribute("src");
 	imageOverlayVideo.pause();
@@ -2122,10 +2206,6 @@ function resetNextflixOverlayMedia() {
 	imageOverlayVideo.load();
 	imageOverlayVideo.hidden = true;
 	laterCard.hidden = true;
-	suppressUiCloseCompletion = true;
-	sleckUi?.close();
-	sogoUi?.close();
-	suppressUiCloseCompletion = false;
 	imageOverlay.style.cursor = "";
 }
 
@@ -4758,6 +4838,7 @@ function animate(now = 0) {
 				updateNpcGazes(deltaTime);
 					updatePositionLine();
 				updateInteractionFocus();
+				updateNpcInteractionOutlines();
 			}
 	}
 
